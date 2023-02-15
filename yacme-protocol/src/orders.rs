@@ -180,3 +180,26 @@ impl Client {
         todo!("Download the certificate as X509 data")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn orders_list() {
+        let response = crate::response!("order-list.http");
+        let orders: Orders = serde_json::from_str(response.body()).unwrap();
+        assert_eq!(orders.orders.len(), 3);
+        assert!(orders.next.is_none());
+    }
+
+    #[test]
+    fn order() {
+        let raw = crate::example!("order.json");
+        let order: Order = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            order.certificate,
+            Some("https://example.com/acme/cert/mAt3xBGaobw".parse().unwrap())
+        )
+    }
+}

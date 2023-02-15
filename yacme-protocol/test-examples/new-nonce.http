@@ -1,0 +1,4 @@
+   HTTP/1.1 200 OK
+   Replay-Nonce: oFvnlFP1wIhRlYS2jTaXbA
+   Cache-Control: no-store
+   Link: <https://example.com/acme/directory>;rel="index"

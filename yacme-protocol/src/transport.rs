@@ -19,6 +19,12 @@ const CONTENT_JOSE: &str = "application/jose+json";
 #[derive(Debug, Serialize)]
 pub struct Nonce(String);
 
+impl AsRef<str> for Nonce {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct Base64JSON<T>(pub T);
 
@@ -548,5 +554,51 @@ impl Client {
 
         let value = extract_nonce(response.headers())?;
         Ok(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::*;
+
+    #[test]
+    fn extract_nonce_from_header() {
+        let response = crate::response!("new-nonce.http");
+        let nonce = extract_nonce(response.headers()).unwrap();
+        assert_eq!(nonce.as_ref(), "oFvnlFP1wIhRlYS2jTaXbA");
+    }
+
+    #[test]
+    fn new_account_request() {
+        let nonce = "6S8IqOGY7eL2lsGoTZYifg";
+        let key = crate::key!("ec-p255");
+        let builder = crate::account::AccountBuilder::new()
+            .add_contact_email("cert-admin@example.org")
+            .unwrap()
+            .add_contact_email("admin@example.org")
+            .unwrap()
+            .agree_to_terms_of_service();
+
+        let header = ProtectedHeader::new_acme_header(
+            &key,
+            "https://example.com/acme/new-account".parse().unwrap(),
+            Nonce(nonce.into()),
+        );
+        let payload = builder.build_payload(
+            key.public_key(),
+            "https://example.com/acme/new-account".parse().unwrap(),
+        );
+
+        let token = UnsignedToken::post(header, &payload);
+        let rng = ring::rand::SystemRandom::new();
+        let signed_token = token.sign_ecdsa(&rng, &key).unwrap();
+
+        let serialized = serde_json::to_value(signed_token).unwrap();
+        let expected = serde_json::from_str::<Value>(crate::example!("new-account.json")).unwrap();
+
+        assert_eq!(serialized["payload"], expected["payload"]);
+        assert_eq!(serialized["protected"], expected["protected"]);
     }
 }

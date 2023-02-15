@@ -56,3 +56,25 @@ pub struct Metadata {
     #[serde(default)]
     pub external_account_required: Option<bool>,
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::response;
+
+    #[test]
+    fn deserialize_directory() {
+        let response = response!("directory.http");
+
+        let directory: Directory = serde_json::from_str(response.body()).unwrap();
+        assert_eq!(
+            directory.new_account,
+            "https://example.com/acme/new-account".parse().unwrap()
+        );
+        assert_eq!(
+            directory.meta.unwrap().website,
+            Some("https://www.example.com/".parse().unwrap())
+        )
+    }
+}

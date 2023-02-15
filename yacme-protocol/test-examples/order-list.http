@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+Link: <https://example.com/acme/directory>;rel="index"
+Link: <https://example.com/acme/orders/rzGoeA?cursor=2>;rel="next"
+
+{
+    "orders": [
+    "https://example.com/acme/order/TOlocE8rfgo",
+    "https://example.com/acme/order/4E16bbL5iSw",
+    "https://example.com/acme/order/neBHYLfw0mg"
+    ]
+}

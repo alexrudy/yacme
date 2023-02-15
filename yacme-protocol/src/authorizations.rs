@@ -47,3 +47,20 @@ impl Client {
         Ok(auth)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authorization() {
+        let raw = crate::example!("authorization.json");
+        let auth: Authorization = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            auth.identifier,
+            Identifier::Dns {
+                value: "www.example.org".into()
+            }
+        );
+    }
+}

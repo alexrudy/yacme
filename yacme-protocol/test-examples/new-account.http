@@ -1,0 +1,21 @@
+POST /acme/new-account HTTP/1.1
+Host: example.com
+Content-Type: application/jose+json
+
+{
+  "protected": base64url({
+    "alg": "ES256",
+    "jwk": {...
+    },
+    "nonce": "6S8IqOGY7eL2lsGoTZYifg",
+    "url": "https://example.com/acme/new-account"
+  }),
+  "payload": base64url({
+    "termsOfServiceAgreed": true,
+    "contact": [
+      "mailto:cert-admin@example.org",
+      "mailto:admin@example.org"
+    ]
+  }),
+  "signature": "RZPOnYoPs1PhjszF...-nh6X1qtOFPB519I"
+}

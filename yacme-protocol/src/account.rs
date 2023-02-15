@@ -72,7 +72,7 @@ pub struct AccountInfo {
     pub orders: Url,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountStatus {
     Valid,
@@ -92,6 +92,10 @@ struct CreateAccount<'k> {
     #[serde(skip_serializing_if = "Option::is_none")]
     external_account_binding: Option<ExternalAccountToken<'k>>,
 }
+
+#[cfg(test)]
+#[derive(Serialize)]
+pub(super) struct CreateAccountPayload<'k>(CreateAccount<'k>);
 
 #[derive(Debug, Default)]
 pub struct AccountBuilder {
@@ -135,8 +139,8 @@ impl AccountBuilder {
         self
     }
 
-    pub fn add_contact_email(self, email: String) -> Result<Self, ()> {
-        let url: Url = format!("mailto:{email}").parse().unwrap();
+    pub fn add_contact_email(self, email: &str) -> Result<Self, url::ParseError> {
+        let url: Url = format!("mailto:{email}").parse()?;
         Ok(self.add_contact_url(url))
     }
 
@@ -149,6 +153,11 @@ impl AccountBuilder {
                 .external_account_binding
                 .map(|e| e.token(public_key, url)),
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn build_payload(self, public_key: &PublicKey, url: Url) -> CreateAccountPayload {
+        CreateAccountPayload(self.build(public_key, url))
     }
 
     fn update<'c>(self) -> CreateAccount<'c> {
@@ -233,5 +242,23 @@ impl Account {
 
     pub(super) fn key(&self) -> &EcdsaKeyPair {
         &self.key
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn deserialize_account() {
+        let raw = crate::example!("account.json");
+        let account: AccountInfo = serde_json::from_str(raw).unwrap();
+
+        assert_eq!(account.status, AccountStatus::Valid);
+        assert_eq!(
+            account.orders,
+            "https://example.com/acme/orders/rzGoeA".parse().unwrap()
+        );
     }
 }
