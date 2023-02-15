@@ -10,7 +10,6 @@ base64-url.workspace = true
 chrono.workspace = true
 eyre.workspace = true
 http.workspace = true
-pem-rfc7468 = { version = "0.6.0", features = ["std"] }
 reqwest.workspace = true
 ring.workspace = true
 serde.workspace = true
@@ -21,4 +20,4 @@ url.workspace = true
 x509-certificate.workspace = true
 
 [dev-dependencies]
-httparse = "1.8.0"
+pem-rfc7468 = { version = "0.6.0", features = ["std"] }
