@@ -1,11 +1,11 @@
-mod account;
+pub mod account;
 pub mod authorizations;
 pub mod challenges;
-mod directory;
-mod errors;
-mod identifier;
+pub mod directory;
+pub mod errors;
+pub mod identifier;
 mod key;
-mod orders;
+pub mod orders;
 mod transport;
 
 pub use account::{Account, AccountInfo};

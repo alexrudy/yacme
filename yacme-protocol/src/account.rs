@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::fmt;
 use std::sync::Arc;
 
 use reqwest::{Response, Url};
@@ -28,7 +29,7 @@ impl AsRef<[u8]> for Key {
 }
 
 #[derive(Serialize)]
-struct ExternalAccountToken<'k>(SignedToken<'k, Base64DataRef<'k, PublicKey>, String, Key, Tag>);
+struct ExternalAccountToken<'k>(SignedToken<'k, Base64DataRef<'k, PublicKey>, String, Tag>);
 
 /// Information for externally binding accounts, provided
 /// by the ACME provider.
@@ -212,11 +213,25 @@ impl Client {
     }
 }
 
-#[derive(Debug)]
 pub struct Account {
     key_identifier: AccountKeyIdentifier,
     key: Arc<EcdsaKeyPair>,
     account: AccountInfo,
+}
+
+impl fmt::Debug for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Account")
+            .field("url", &self.key_identifier.to_url())
+            .field("status", &self.account.status)
+            .field("contact", &self.account.contact)
+            .field(
+                "terms_of_service_agreed",
+                &self.account.terms_of_service_agreed,
+            )
+            .field("orders", &self.account.orders)
+            .finish()
+    }
 }
 
 impl Account {

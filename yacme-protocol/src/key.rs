@@ -23,7 +23,7 @@ enum KeyType {
 struct Coordinate(Vec<u8>);
 
 #[derive(Debug, Serialize)]
-struct JWKThumb<'k> {
+pub(crate) struct JWK<'k> {
     #[serde(rename = "crv")]
     curve: CurveID,
 
@@ -33,6 +33,18 @@ struct JWKThumb<'k> {
     x: Base64Data<&'k [u8]>,
 
     y: Base64Data<&'k [u8]>,
+}
+
+impl<'k> JWK<'k> {
+    pub(crate) fn new(key: &'k EcdsaKeyPair) -> JWK<'k> {
+        let (x, y) = key.public_key().as_ref()[1..].split_at(32);
+        Self {
+            curve: CurveID::P256,
+            key_type: KeyType::EllipticCurve,
+            x: Base64Data(x),
+            y: Base64Data(y),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,15 +57,7 @@ impl fmt::Display for Thumbprint {
 }
 
 pub fn thumbprint(key: &EcdsaKeyPair) -> Thumbprint {
-    let (x, y) = key.public_key().as_ref()[1..].split_at(32);
-
-    let jwk = JWKThumb {
-        curve: CurveID::P256,
-        key_type: KeyType::EllipticCurve,
-        x: Base64Data(x),
-        y: Base64Data(y),
-    };
-
+    let jwk = JWK::new(key);
     let raw = serde_json::to_vec(&jwk).expect("Valid jwk json");
     let digest = ring::digest::digest(&ring::digest::SHA256, &raw);
 

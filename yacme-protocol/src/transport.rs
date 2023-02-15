@@ -9,6 +9,8 @@ use ring::signature::{EcdsaKeyPair, KeyPair, Signature};
 use serde::{de, ser, Serialize};
 use thiserror::Error;
 
+use crate::key::JWK;
+
 use super::directory::Directory;
 use super::errors::{AcmeError, AcmeErrorDocument};
 use super::key::SignatureAlgorithm;
@@ -163,21 +165,24 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(bound(serialize = "KI: AsRef<[u8]>, KP: AsRef<[u8]>"))]
-pub(super) struct ProtectedHeader<'k, KI, KP: ?Sized> {
+#[serde(bound(serialize = "KI: AsRef<[u8]>"))]
+pub(super) struct ProtectedHeader<'k, KI> {
+    #[serde(rename = "alg")]
     algorithm: SignatureAlgorithm,
+    #[serde(rename = "kid", skip_serializing_if = "Option::is_none")]
     key_id: Option<Base64Data<KI>>,
-    web_key: Option<Base64DataRef<'k, KP>>,
-    url: Url,
+    #[serde(rename = "jwk", skip_serializing_if = "Option::is_none")]
+    web_key: Option<JWK<'k>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<Nonce>,
+    url: Url,
 }
 
-impl<'k, KI, KP> ProtectedHeader<'k, KI, KP> {
+impl<'k, KI> ProtectedHeader<'k, KI> {
     pub(super) fn new(
         algorithm: SignatureAlgorithm,
         key_id: Option<Base64Data<KI>>,
-        web_key: Option<Base64DataRef<'k, KP>>,
+        web_key: Option<JWK<'k>>,
         url: Url,
         nonce: Option<Nonce>,
     ) -> Self {
@@ -185,23 +190,22 @@ impl<'k, KI, KP> ProtectedHeader<'k, KI, KP> {
             algorithm,
             key_id,
             web_key,
-            url,
             nonce,
+            url,
         }
     }
 }
 
-type AcmeProtectedHeader<'k> =
-    ProtectedHeader<'k, &'k AccountKeyIdentifier, <EcdsaKeyPair as KeyPair>::PublicKey>;
+type AcmeProtectedHeader<'k> = ProtectedHeader<'k, &'k AccountKeyIdentifier>;
 
-impl<'k> ProtectedHeader<'k, &'k AccountKeyIdentifier, <EcdsaKeyPair as KeyPair>::PublicKey> {
+impl<'k> ProtectedHeader<'k, &'k AccountKeyIdentifier> {
     fn new_acme_header(key: &'k EcdsaKeyPair, url: Url, nonce: Nonce) -> AcmeProtectedHeader<'k> {
         Self {
             algorithm: SignatureAlgorithm::ES256,
-            web_key: Some(key.public_key().into()),
+            web_key: Some(JWK::new(key)),
             key_id: None,
-            url,
             nonce: Some(nonce),
+            url,
         }
     }
 
@@ -214,8 +218,8 @@ impl<'k> ProtectedHeader<'k, &'k AccountKeyIdentifier, <EcdsaKeyPair as KeyPair>
             algorithm: SignatureAlgorithm::ES256,
             web_key: None,
             key_id: Some(account.into()),
-            url,
             nonce: Some(nonce),
+            url,
         }
     }
 }
@@ -260,9 +264,9 @@ where
 }
 
 #[derive(Debug, Serialize)]
-#[serde(bound(serialize = "P: Serialize, KI: AsRef<[u8]>, KP: AsRef<[u8]>, S: AsRef<[u8]>"))]
-pub struct SignedToken<'k, P, KI, KP, S> {
-    protected: Base64JSON<ProtectedHeader<'k, KI, KP>>,
+#[serde(bound(serialize = "P: Serialize, KI: AsRef<[u8]>, S: AsRef<[u8]>"))]
+pub struct SignedToken<'k, P, KI, S> {
+    protected: Base64JSON<ProtectedHeader<'k, KI>>,
     payload: Payload<P>,
     signature: Base64Data<S>,
 }
@@ -288,13 +292,13 @@ where
     }
 }
 
-pub(super) struct UnsignedToken<'k, P, KI, KP> {
-    protected: Base64JSON<ProtectedHeader<'k, KI, KP>>,
+pub(super) struct UnsignedToken<'k, P, KI> {
+    protected: Base64JSON<ProtectedHeader<'k, KI>>,
     payload: Payload<P>,
 }
 
-impl<'k, KI, KP> UnsignedToken<'k, (), KI, KP> {
-    pub(super) fn get(protected: ProtectedHeader<'k, KI, KP>) -> Self {
+impl<'k, KI> UnsignedToken<'k, (), KI> {
+    pub(super) fn get(protected: ProtectedHeader<'k, KI>) -> Self {
         Self {
             protected: protected.into(),
             payload: Payload::Empty,
@@ -302,8 +306,8 @@ impl<'k, KI, KP> UnsignedToken<'k, (), KI, KP> {
     }
 }
 
-impl<'k, P, KI, KP> UnsignedToken<'k, P, KI, KP> {
-    pub(super) fn post(protected: ProtectedHeader<'k, KI, KP>, payload: P) -> Self {
+impl<'k, P, KI> UnsignedToken<'k, P, KI> {
+    pub(super) fn post(protected: ProtectedHeader<'k, KI>, payload: P) -> Self {
         Self {
             protected: protected.into(),
             payload: payload.into(),
@@ -311,16 +315,15 @@ impl<'k, P, KI, KP> UnsignedToken<'k, P, KI, KP> {
     }
 }
 
-impl<'k, P, KI, KP> UnsignedToken<'k, P, KI, KP>
+impl<'k, P, KI> UnsignedToken<'k, P, KI>
 where
     P: Serialize,
     KI: AsRef<[u8]>,
-    KP: AsRef<[u8]>,
 {
     pub(super) fn sign<'m: 'k, F, S, E>(
         self,
         f: F,
-    ) -> Result<SignedToken<'k, P, KI, KP, S>, SigningError<E>>
+    ) -> Result<SignedToken<'k, P, KI, S>, SigningError<E>>
     where
         F: FnOnce(&[u8]) -> Result<S, E>,
         E: std::fmt::Display,
@@ -345,7 +348,7 @@ where
     }
 }
 
-impl<'k, P> UnsignedToken<'k, P, &'k AccountKeyIdentifier, <EcdsaKeyPair as KeyPair>::PublicKey>
+impl<'k, P> UnsignedToken<'k, P, &'k AccountKeyIdentifier>
 where
     P: Serialize,
 {
@@ -353,19 +356,84 @@ where
         self,
         rng: &'m dyn ring::rand::SecureRandom,
         key: &'k EcdsaKeyPair,
-    ) -> Result<
-        SignedToken<
-            'k,
-            P,
-            &'k AccountKeyIdentifier,
-            <EcdsaKeyPair as KeyPair>::PublicKey,
-            Signature,
-        >,
-        SigningError<Report>,
-    > {
+    ) -> Result<SignedToken<'k, P, &'k AccountKeyIdentifier, Signature>, SigningError<Report>> {
         self.sign(|message| {
             key.sign(rng, message)
                 .map_err(|_| Report::msg("An unspecified signing error occured"))
+        })
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+enum InitialDirectory {
+    Fetch(Url),
+    Directory(Directory),
+}
+
+pub struct ClientBuilder {
+    inner: reqwest::Client,
+    key: Option<Arc<EcdsaKeyPair>>,
+    directory: Option<InitialDirectory>,
+}
+
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ClientBuilder {
+    pub fn new() -> Self {
+        ClientBuilder {
+            inner: reqwest::Client::new(),
+            key: None,
+            directory: None,
+        }
+    }
+
+    pub fn with_client(mut self, client: reqwest::Client) -> Self {
+        self.inner = client;
+        self
+    }
+
+    pub fn with_directory_url(mut self, url: Url) -> Self {
+        self.directory = Some(InitialDirectory::Fetch(url));
+        self
+    }
+
+    pub fn with_directory(mut self, directory: Directory) -> Self {
+        self.directory = Some(InitialDirectory::Directory(directory));
+        self
+    }
+
+    pub fn with_key(mut self, key: Arc<EcdsaKeyPair>) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    pub async fn build(self) -> Result<Client, Report> {
+        let directory = match self
+            .directory
+            .ok_or_else(|| Report::msg("Missing directory"))?
+        {
+            InitialDirectory::Fetch(url) => {
+                self.inner
+                    .get(url)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?
+            }
+            InitialDirectory::Directory(directory) => directory,
+        };
+
+        Ok(Client {
+            inner: self.inner,
+            key: self.key.ok_or_else(|| Report::msg("Missing signing key"))?,
+            nonce: None,
+            directory,
+            rng: Box::new(ring::rand::SystemRandom::new()) as _,
         })
     }
 }
@@ -411,6 +479,10 @@ impl Client {
         })
     }
 
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::new()
+    }
+
     pub(super) fn public_key(&self) -> &<EcdsaKeyPair as KeyPair>::PublicKey {
         self.key.public_key()
     }
@@ -429,6 +501,7 @@ impl Client {
         let nonce = self.get_nonce().await?;
         let key = self.key.clone();
         let header = ProtectedHeader::new_acme_header(&key, request.url().clone(), nonce);
+
         let response = self.execute_post(request, payload, header).await?;
         if response.status().is_success() {
             Ok(response)
@@ -445,8 +518,16 @@ impl Client {
         payload: &P,
         header: AcmeProtectedHeader<'_>,
     ) -> Result<reqwest::Response, AcmeError> {
+        eprintln!("ProtectedHeader:");
+        eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
+        eprintln!("Payload:");
+        eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
+
         let token =
             UnsignedToken::post(header, payload).sign_ecdsa(self.rng.as_ref(), &self.key)?;
+
+        eprintln!("Full Token:");
+        eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
 
         let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
 

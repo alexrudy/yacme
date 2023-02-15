@@ -21,3 +21,5 @@ x509-certificate.workspace = true
 
 [dev-dependencies]
 pem-rfc7468 = { version = "0.6.0", features = ["std"] }
+tokio = { version = "1.2", features = ["full"] }
+tracing-subscriber.version = "*"
