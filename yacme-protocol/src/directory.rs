@@ -44,7 +44,7 @@ pub struct Metadata {
     pub website: Option<Url>,
 
     /// The hostnames that the ACME server recognizes as referring to itself for the purposes of
-    /// CAA record validation as defined in [RFC6844](https://www.rfc-editor.org/rfc/rfc6844).  
+    /// CAA record validation as defined in [RFC6844](https://www.rfc-editor.org/rfc/rfc6844).
     /// Each string represents the same sequence of ASCII code points that the server
     /// will expect to see as the "Issuer Domain Name" in a CAA issue or
     /// issuewild property tag.  This allows clients to determine the
