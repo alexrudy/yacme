@@ -1,7 +1,7 @@
 use http::HeaderValue;
 use thiserror::Error;
 
-pub(super) use self::acme::AcmeErrorDocument;
+pub use self::acme::AcmeErrorDocument;
 
 #[derive(Debug, Error)]
 pub enum AcmeError {
@@ -24,15 +24,15 @@ pub enum AcmeError {
 }
 
 impl AcmeError {
-    pub(super) fn de(error: serde_json::Error) -> Self {
+    pub fn de(error: serde_json::Error) -> Self {
         AcmeError::JsonDeserialize(error)
     }
 
-    pub(super) fn ser(error: serde_json::Error) -> Self {
+    pub fn ser(error: serde_json::Error) -> Self {
         AcmeError::JsonSerialize(error)
     }
 
-    pub(super) fn nonce(error: reqwest::Error) -> Self {
+    pub fn nonce(error: reqwest::Error) -> Self {
         AcmeError::NonceRequest(error)
     }
 }

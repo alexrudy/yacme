@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use url::Url;
+use yacme_protocol::Url;
 
 /// Directories are the single source required to configure an ACME client
 /// for use with a specific provider. They can be fetched as JSON from an

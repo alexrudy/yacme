@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
-use super::account::Account;
-use super::errors::AcmeError;
-use super::errors::AcmeErrorDocument;
-use super::identifier::Identifier;
-use super::transport::Client;
+use crate::account::Account;
+use crate::client::Client;
+use crate::identifier::Identifier;
+use yacme_protocol::errors::AcmeError;
+use yacme_protocol::errors::AcmeErrorDocument;
+use yacme_protocol::Url;
 
 #[derive(Debug, Deserialize)]
 pub struct Orders {
@@ -30,6 +30,10 @@ pub struct Order {
 }
 
 impl Order {
+    pub fn builder() -> OrderBuilder {
+        OrderBuilder::new()
+    }
+
     pub fn status(&self) -> &OrderStatus {
         &self.status
     }
@@ -100,6 +104,10 @@ impl OrderBuilder {
         self.identifiers.push(identifier);
     }
 
+    pub fn dns<S: Into<String>>(&mut self, identifier: S) {
+        self.identifiers.push(Identifier::dns(identifier.into()))
+    }
+
     pub fn start(&mut self, when: DateTime<Utc>) {
         self.not_before = Some(when);
     }
@@ -128,7 +136,7 @@ impl Client {
         let mut page = 0;
         loop {
             tracing::debug!("Fetching orders, page {page}");
-            let request = reqwest::Request::new(http::Method::POST, url);
+            let request = reqwest::Request::new(http::Method::POST, url.into());
             let response = self.account_get(account.key_identifier(), request).await?;
             let orders_page: Orders = response.json().await?;
             orders.extend(orders_page.orders.into_iter());
@@ -152,7 +160,8 @@ impl Client {
         account: &Account,
         order: OrderBuilder,
     ) -> Result<Order, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, self.directory.new_order.clone());
+        let request =
+            reqwest::Request::new(http::Method::POST, self.directory.new_order.clone().into());
         let payload = order.build();
         let response = self
             .account_post(account.key_identifier(), request, &payload)

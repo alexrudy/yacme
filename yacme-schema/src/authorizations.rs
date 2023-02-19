@@ -1,8 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use url::Url;
 
-use super::{challenges::Challenge, identifier::Identifier, Account, AcmeError, Client};
+use crate::challenges::Challenge;
+use crate::client::Client;
+use crate::identifier::Identifier;
+use crate::Account;
+use yacme_protocol::AcmeError;
+use yacme_protocol::Url;
 
 ///
 ///   An ACME authorization object represents a server’s authorization for
@@ -39,7 +43,7 @@ impl Client {
         account: &Account,
         url: Url,
     ) -> Result<Authorization, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, url);
+        let request = reqwest::Request::new(http::Method::POST, url.into());
         let response = self.account_get(account.key_identifier(), request).await?;
 
         let body = response.bytes().await?;

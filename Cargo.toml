@@ -5,13 +5,32 @@ members = ["yacme-*"]
 base64-url = "1.4.13"
 chrono = { version = "0.4.23", features = ["serde"] }
 eyre = "0.6.8"
-http = "0.2.8"
+http = "0.2.9"
 reqwest = { version = "^0.11", features = [
     "rustls-tls",
     "json",
-], default_features = false }
+], default-features = false }
 serde = { version = "^1.0.152", features = ["derive"] }
-serde_json = "^1.0.91"
+serde_json = "^1.0.93"
+signature = "^2.0.0"
 thiserror = "^1.0.38"
 tracing = { version = "0.1.37", features = ["async-await"] }
 url = { version = "2.3.1", features = ["serde"] }
+elliptic-curve = { version = "^0.12.3", features = [
+    "pkcs8",
+    "jwk",
+    "arithmetic",
+] }
+ecdsa = { version = "^0.15.0", features = ["std", "pkcs8", "pem"] }
+rsa = "^0.8.1"
+p256 = { version = "^0.12.0", features = ["pkcs8", "arithmetic", "jwk"] }
+pkcs8 = "^0.9.0"
+hmac = "^0.12.1"
+sha2 = "^0.10.6"
+pem-rfc7468 = { version = "^0.6.0", features = ["std"] }
+tokio = { version = "^1.25", features = ["full"] }
+tracing-subscriber.version = "^0.3"
+
+yacme-key = { path = "yacme-key/" }
+yacme-protocol = { path = "yacme-protocol/" }
+yacme-schema = { path = "yacme-schema/" }

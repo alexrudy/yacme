@@ -1,16 +1,52 @@
-pub mod account;
-pub mod authorizations;
-mod base64;
-pub mod challenges;
-pub mod directory;
-pub mod errors;
-pub mod identifier;
-pub mod orders;
-mod transport;
+use std::{fmt, str::FromStr};
 
-pub use account::{Account, AccountInfo};
+mod base64;
+pub mod errors;
+pub mod jose;
+
 pub use errors::AcmeError;
-pub use transport::Client;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Url(url::Url);
+
+impl Url {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<url::Url> for Url {
+    fn from(value: url::Url) -> Self {
+        Url(value)
+    }
+}
+
+impl From<Url> for url::Url {
+    fn from(value: Url) -> Self {
+        value.0
+    }
+}
+
+impl AsRef<str> for Url {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl fmt::Debug for Url {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Url").field(&self.0.as_str()).finish()
+    }
+}
+
+impl FromStr for Url {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map(Url)
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod test {
@@ -28,13 +64,6 @@ pub(crate) mod test {
     }
 
     #[macro_export]
-    macro_rules! response {
-        ($name:tt) => {
-            $crate::test::parse($crate::example!($name))
-        };
-    }
-
-    #[macro_export]
     macro_rules! key {
         ($name:tt) => {
             $crate::test::key(include_str!(concat!(
@@ -46,6 +75,7 @@ pub(crate) mod test {
         };
     }
 
+    #[allow(dead_code)]
     pub(crate) fn key(private: &str) -> Arc<yacme_key::SigningKey> {
         let key = yacme_key::SigningKey::from_pkcs8_pem(
             private,
@@ -54,42 +84,5 @@ pub(crate) mod test {
         .unwrap();
 
         Arc::new(key)
-    }
-
-    pub(crate) fn parse(data: &str) -> http::Response<String> {
-        let mut lines = data.lines();
-
-        let status = {
-            let status_line = lines.next().unwrap().trim();
-            let (version, status) = status_line.split_once(' ').unwrap();
-
-            if !matches!(version, "HTTP/1.1") {
-                panic!("Expected HTTP/1.1, got {version}");
-            }
-
-            let (code, _reason) = status.split_once(' ').unwrap();
-            http::StatusCode::from_u16(code.parse().unwrap()).unwrap()
-        };
-
-        let mut headers = http::HeaderMap::new();
-
-        for line in lines.by_ref() {
-            if line.is_empty() {
-                break;
-            } else {
-                let (name, value) = line.trim().split_once(": ").unwrap();
-                headers.append(
-                    http::header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
-                    value.parse().unwrap(),
-                );
-            }
-        }
-
-        let body: String = lines.collect();
-        let mut response = http::Response::new(body);
-        *response.headers_mut() = headers;
-        *response.status_mut() = status;
-        *response.version_mut() = http::Version::HTTP_11;
-        response
     }
 }

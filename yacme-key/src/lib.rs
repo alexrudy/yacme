@@ -1,3 +1,11 @@
+//! # Encryption keys for ACME protocol certificate issuance.
+//!
+//! ACME requires that accounts be identified by an asymmetric public/private key pair
+//! used for signing all requests. This crate implements the types which handle those
+//! keypairs, using RustCrypto libraries under the hood. The types here are not directly
+//! the RustCrypto primatives, as they abstract over the actual algorithm in use without
+//! polluting the entire ACME interface with generics.
+
 use std::fmt;
 
 mod ecdsa;
@@ -7,7 +15,9 @@ use crate::ecdsa::EcdsaSigningKey;
 
 pub use crate::ecdsa::EcdsaAlgorithm;
 
-/// A signature
+/// A signature, produced by signing a key over a message.
+/// Interally, just bytes which must be encoded in some fashion
+/// for use.
 pub struct Signature(Vec<u8>);
 
 impl fmt::Debug for Signature {
@@ -35,6 +45,9 @@ pub struct SigningError;
 pub struct PublicKey(Box<dyn PublicKeyAlgorithm>);
 
 impl PublicKey {
+    /// A JSON web key type suitable for use in a JWS header
+    /// and for use when creating a key thumbprint for authentication
+    /// challenges.
     pub fn to_jwk(&self) -> crate::jwk::Jwk {
         self.0.as_jwk()
     }
@@ -61,16 +74,45 @@ impl AsRef<[u8]> for PublicKey {
     }
 }
 
+/// Supported signing key types for YACME
+///
+/// Currently, only ECDSA P256 is supported.
+///
+/// ```
+/// use yacme_key::SignatureKind;
+/// use yacme_key::EcdsaAlgorithm;
+/// let algorithm = SignatureKind::Ecdsa(EcdsaAlgorithm::P256);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureKind {
     Ecdsa(EcdsaAlgorithm),
 }
 
 /// Signing key to authenticate an ACME account
+///
+/// Read a signing key from a PKCS#8 PEM-encoded file:
+///
+/// ```
+/// # use yacme_key::{SignatureKind, SigningKey};
+/// # use yacme_key::EcdsaAlgorithm;
+/// let private = "-----BEGIN PRIVATE KEY-----
+/// MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgm1tOPOUt86+QgoiJ
+/// kirpEl69+tUxLP848nPw9BbyW1ShRANCAASGWHBM2Lj7uUA4i9/jKSDp1vw4+iyu
+/// hxVHBELXhxaD/LOQKtQAOhumi1uCTg8mMTrFrUM1VOtF8R0+rjrB3UXd
+/// -----END PRIVATE KEY-----";
+/// let key = SigningKey::from_pkcs8_pem(private,
+///    SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256))
+/// .unwrap();
+/// ```
+///
+/// ⚠️ *Do not use this key, it is an example used for testing only*!
 #[derive(Debug)]
 pub struct SigningKey(InnerSigningKey);
 
 impl SigningKey {
+    /// Read a private key from a PEM-encoded PKCS#8 format key (usually the kind produced by
+    /// OpenSSL) into this signing key document. You must provide the signature kind, as the code
+    /// does not currently infer the type of key in use.
     pub fn from_pkcs8_pem(data: &str, signature: SignatureKind) -> Result<Self, pkcs8::Error> {
         match signature {
             SignatureKind::Ecdsa(algorithm) => Ok(SigningKey(InnerSigningKey::Ecdsa(Box::new(
@@ -81,10 +123,14 @@ impl SigningKey {
 }
 
 impl SigningKey {
+    /// The public key half of this signing key.
     pub fn public_key(&self) -> PublicKey {
         self.0.public_key()
     }
 
+    /// A JSON web key type suitable for use in a JWS header
+    /// and for use when creating a key thumbprint for authentication
+    /// challenges.
     pub fn as_jwk(&self) -> crate::jwk::Jwk {
         self.0.as_jwk()
     }

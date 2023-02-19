@@ -3,16 +3,17 @@ use std::sync::Arc;
 
 use eyre::Report;
 use http::HeaderMap;
-use reqwest::{Request, Url};
+use reqwest::Request;
 use serde::Serialize;
 
 use crate::directory::Directory;
-use crate::errors::{AcmeError, AcmeErrorDocument};
-use crate::jose::AccountKeyIdentifier;
-use crate::jose::AcmeProtectedHeader;
-use crate::jose::Nonce;
-use crate::jose::ProtectedHeader;
-use crate::jose::UnsignedToken;
+use yacme_protocol::errors::{AcmeError, AcmeErrorDocument};
+use yacme_protocol::jose::AccountKeyIdentifier;
+use yacme_protocol::jose::AcmeProtectedHeader;
+use yacme_protocol::jose::Nonce;
+use yacme_protocol::jose::ProtectedHeader;
+use yacme_protocol::jose::UnsignedToken;
+use yacme_protocol::Url;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
 const CONTENT_JOSE: &str = "application/jose+json";
@@ -71,7 +72,7 @@ impl ClientBuilder {
         {
             InitialDirectory::Fetch(url) => {
                 self.inner
-                    .get(url)
+                    .get(url.as_str())
                     .send()
                     .await?
                     .error_for_status()?
@@ -116,7 +117,7 @@ impl Client {
         url: Url,
     ) -> Result<Self, reqwest::Error> {
         let client = reqwest::Client::new();
-        let response = client.get(url).send().await?.error_for_status()?;
+        let response = client.get(url.as_str()).send().await?.error_for_status()?;
 
         let directory = response.json().await?;
 
@@ -149,7 +150,7 @@ impl Client {
     ) -> Result<reqwest::Response, AcmeError> {
         let nonce = self.get_nonce().await?;
         let key = self.key.clone();
-        let header = ProtectedHeader::new_acme_header(&key, request.url().clone(), nonce);
+        let header = ProtectedHeader::new_acme_header(&key, request.url().clone().into(), nonce);
 
         let response = self.execute_post(request, payload, header).await?;
         if response.status().is_success() {
@@ -201,7 +202,7 @@ impl Client {
     ) -> Result<reqwest::Response, AcmeError> {
         let nonce = self.get_nonce().await?;
         let header =
-            ProtectedHeader::new_acme_account_header(account, request.url().clone(), nonce);
+            ProtectedHeader::new_acme_account_header(account, request.url().clone().into(), nonce);
         let response = self.execute_post(request, payload, header).await?;
         if response.status().is_success() {
             Ok(response)
@@ -240,7 +241,7 @@ impl Client {
     ) -> Result<reqwest::Response, AcmeError> {
         let nonce = self.get_nonce().await?;
         let header =
-            ProtectedHeader::new_acme_account_header(account, request.url().clone(), nonce);
+            ProtectedHeader::new_acme_account_header(account, request.url().clone().into(), nonce);
         let response = self.execute_get(request, header).await?;
         if response.status().is_success() {
             Ok(response)
@@ -276,7 +277,7 @@ impl Client {
         tracing::debug!("Requesting a new nonce");
         let response = self
             .inner
-            .head(self.directory.new_nonce.clone())
+            .head(self.directory.new_nonce.clone().as_str())
             .send()
             .await
             .map_err(AcmeError::nonce)?;

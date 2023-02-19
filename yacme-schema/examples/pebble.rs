@@ -11,9 +11,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use reqwest::Certificate;
-use yacme_protocol::identifier::Identifier;
-use yacme_protocol::orders::OrderBuilder;
-use yacme_protocol::Client;
+use yacme_schema::Client;
+use yacme_schema::Order;
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 
@@ -69,8 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Step 1: Get an account
-    let account_request = yacme_protocol::account::AccountBuilder::new()
-        .add_contact_email("hello@example.org")
+    let account_request = yacme_schema::Account::builder()
+        .add_contact_email("hello@example.test")
         .unwrap()
         .agree_to_terms_of_service();
     tracing::info!("Requesting account");
@@ -78,8 +77,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Account: {account:#?}");
 
     tracing::info!("Requesting order");
-    let mut order_request = OrderBuilder::new();
-    order_request.push(Identifier::dns("www.example.org".into()));
+    let mut order_request = Order::builder();
+    order_request.dns("www.example.test");
 
     let order = client.order(&account, order_request).await?;
     println!("Order: {order:#?}");

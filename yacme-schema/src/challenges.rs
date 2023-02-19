@@ -1,11 +1,14 @@
 use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
-use reqwest::{Request, Url};
+use reqwest::Request;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
-use super::{errors::AcmeErrorDocument, Account, AcmeError, Client};
+use crate::account::Account;
+use crate::client::Client;
+use yacme_protocol::Url;
+use yacme_protocol::{errors::AcmeErrorDocument, AcmeError};
 
 #[derive(Debug, Deserialize)]
 struct ChallengeInfo {
@@ -143,7 +146,7 @@ impl Client {
         challenge: Challenge,
     ) -> Result<Challenge, AcmeError> {
         let url = challenge.info().url().clone();
-        let request = Request::new(http::Method::POST, url);
+        let request = Request::new(http::Method::POST, url.into());
         let payload = ChallengeReadyRequest;
         let response = self
             .account_post(account.key_identifier(), request, &payload)

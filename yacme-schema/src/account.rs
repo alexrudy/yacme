@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use reqwest::{Response, Url};
+use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use signature::digest::KeyInit;
 
@@ -9,14 +9,14 @@ use yacme_key::jwk::Jwk;
 use yacme_key::PublicKey;
 use yacme_key::Signature;
 
-use crate::transport::SignatureAlgorithm;
-
-use super::errors::AcmeError;
-use super::transport::AccountKeyIdentifier;
-use super::transport::Client;
-use super::transport::ProtectedHeader;
-use super::transport::SignedToken;
-use super::transport::UnsignedToken;
+use crate::client::Client;
+use yacme_protocol::errors::AcmeError;
+use yacme_protocol::jose::AccountKeyIdentifier;
+use yacme_protocol::jose::ProtectedHeader;
+use yacme_protocol::jose::SignatureAlgorithm;
+use yacme_protocol::jose::SignedToken;
+use yacme_protocol::jose::UnsignedToken;
+use yacme_protocol::Url;
 
 /// Account key for externally binding accounts, provided by the ACME
 /// provider.
@@ -186,7 +186,10 @@ impl Client {
     }
 
     pub async fn create_account(&mut self, account: AccountBuilder) -> Result<Account, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, self.directory.new_account.clone());
+        let request = reqwest::Request::new(
+            http::Method::POST,
+            self.directory.new_account.clone().into(),
+        );
         let key = self.public_key();
         let payload = account.build(&key, self.directory.new_account.clone());
         let response = self.key_post(request, &payload).await?;
@@ -201,7 +204,8 @@ impl Client {
         account: &Account,
         updates: AccountBuilder,
     ) -> Result<Account, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, account.key_identifier.to_url());
+        let request =
+            reqwest::Request::new(http::Method::POST, account.key_identifier.to_url().into());
 
         let response = self
             .account_post(&account.key_identifier, request, &updates.update())
@@ -245,6 +249,10 @@ impl Account {
             key,
             account,
         }
+    }
+
+    pub fn builder() -> AccountBuilder {
+        AccountBuilder::new()
     }
 
     pub fn info(&self) -> &AccountInfo {
