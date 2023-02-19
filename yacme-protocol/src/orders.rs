@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use url::Url;
-use x509_certificate::certificate::X509Certificate;
 
 use super::account::Account;
 use super::errors::AcmeError;
@@ -176,7 +175,7 @@ impl Client {
         &mut self,
         account: &Account,
         order: &Order,
-    ) -> Result<Vec<X509Certificate>, AcmeError> {
+    ) -> Result<Vec<()>, AcmeError> {
         todo!("Download the certificate as X509 data")
     }
 }

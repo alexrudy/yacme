@@ -1,5 +1,5 @@
 [workspace]
-members = ["yacme-protocol"]
+members = ["yacme-*"]
 
 [workspace.dependencies]
 base64-url = "1.4.13"

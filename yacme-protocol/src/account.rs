@@ -1,21 +1,22 @@
-use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 
 use reqwest::{Response, Url};
-use ring::hmac::Tag;
-use ring::signature::EcdsaKeyPair;
 use serde::{Deserialize, Serialize};
+use signature::digest::KeyInit;
+
+use yacme_key::jwk::Jwk;
+use yacme_key::PublicKey;
+use yacme_key::Signature;
+
+use crate::transport::SignatureAlgorithm;
 
 use super::errors::AcmeError;
-use super::key::SignatureAlgorithm;
 use super::transport::AccountKeyIdentifier;
-use super::transport::Base64DataRef;
 use super::transport::Client;
 use super::transport::ProtectedHeader;
 use super::transport::SignedToken;
 use super::transport::UnsignedToken;
-use super::PublicKey;
 
 /// Account key for externally binding accounts, provided by the ACME
 /// provider.
@@ -29,8 +30,10 @@ impl AsRef<[u8]> for Key {
 }
 
 #[derive(Serialize)]
-struct ExternalAccountToken<'k>(SignedToken<'k, Base64DataRef<'k, PublicKey>, String, Tag>);
+struct ExternalAccountToken(SignedToken<Jwk, String, Signature>);
 
+// Create alias for HMAC-SHA256
+type HmacSha256 = hmac::Hmac<sha2::Sha256>;
 /// Information for externally binding accounts, provided
 /// by the ACME provider.
 #[derive(Debug)]
@@ -40,25 +43,22 @@ pub struct ExternalAccountBindingRequest {
 }
 
 impl ExternalAccountBindingRequest {
-    fn token<'k>(&'_ self, public_key: &'k PublicKey, url: Url) -> ExternalAccountToken<'k> {
+    fn token(&self, public_key: &PublicKey, url: Url) -> ExternalAccountToken {
         let token = UnsignedToken::post(
             ProtectedHeader::new(
                 SignatureAlgorithm::HS256,
-                Some(self.id.clone().into()),
+                Some(self.id.clone()),
                 None,
                 url,
                 None,
             ),
-            public_key.into(),
+            public_key.to_jwk(),
         );
 
-        let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, self.key.as_ref());
+        let mac =
+            HmacSha256::new_from_slice(self.key.as_ref()).expect("HMAC can take key of any size");
 
-        ExternalAccountToken(
-            token
-                .sign(|message| Ok::<_, Infallible>(ring::hmac::sign(&key, message)))
-                .unwrap(),
-        )
+        ExternalAccountToken(token.digest(mac).unwrap())
     }
 }
 
@@ -83,7 +83,7 @@ pub enum AccountStatus {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateAccount<'k> {
+struct CreateAccount {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     contact: Vec<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,12 +91,12 @@ struct CreateAccount<'k> {
     #[serde(skip_serializing_if = "Option::is_none")]
     only_return_existing: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    external_account_binding: Option<ExternalAccountToken<'k>>,
+    external_account_binding: Option<ExternalAccountToken>,
 }
 
 #[cfg(test)]
 #[derive(Serialize)]
-pub(super) struct CreateAccountPayload<'k>(CreateAccount<'k>);
+pub(super) struct CreateAccountPayload(CreateAccount);
 
 #[derive(Debug, Default)]
 pub struct AccountBuilder {
@@ -161,7 +161,7 @@ impl AccountBuilder {
         CreateAccountPayload(self.build(public_key, url))
     }
 
-    fn update<'c>(self) -> CreateAccount<'c> {
+    fn update(self) -> CreateAccount {
         CreateAccount {
             contact: self.contact,
             terms_of_service_agreed: None,
@@ -187,7 +187,7 @@ impl Client {
 
     pub async fn create_account(&mut self, account: AccountBuilder) -> Result<Account, AcmeError> {
         let request = reqwest::Request::new(http::Method::POST, self.directory.new_account.clone());
-        let key = *self.public_key();
+        let key = self.public_key();
         let payload = account.build(&key, self.directory.new_account.clone());
         let response = self.key_post(request, &payload).await?;
         let account_key = self.process_account_key_id(&response);
@@ -215,7 +215,7 @@ impl Client {
 
 pub struct Account {
     key_identifier: AccountKeyIdentifier,
-    key: Arc<EcdsaKeyPair>,
+    key: Arc<yacme_key::SigningKey>,
     account: AccountInfo,
 }
 
@@ -237,7 +237,7 @@ impl fmt::Debug for Account {
 impl Account {
     fn new(
         key_identifier: AccountKeyIdentifier,
-        key: Arc<EcdsaKeyPair>,
+        key: Arc<yacme_key::SigningKey>,
         account: AccountInfo,
     ) -> Self {
         Self {
@@ -255,7 +255,7 @@ impl Account {
         &self.key_identifier
     }
 
-    pub(super) fn key(&self) -> &EcdsaKeyPair {
+    pub(super) fn key(&self) -> &yacme_key::SigningKey {
         &self.key
     }
 }

@@ -11,7 +11,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use reqwest::Certificate;
-use ring::signature::EcdsaKeyPair;
 use yacme_protocol::identifier::Identifier;
 use yacme_protocol::orders::OrderBuilder;
 use yacme_protocol::Client;
@@ -25,13 +24,23 @@ fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<EcdsaKeyPair> {
-    let raw = read_bytes(path)?;
+fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
+    let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
+    let mut buf = String::new();
+    rdr.read_to_string(&mut buf)?;
+    Ok(buf)
+}
 
-    let (label, data) = pem_rfc7468::decode_vec(&raw).unwrap();
-    assert_eq!(label, "PRIVATE KEY");
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme_key::SigningKey> {
+    let raw = read_string(path)?;
 
-    Ok(EcdsaKeyPair::from_pkcs8(&ring::signature::ECDSA_P256_SHA256_ASN1_SIGNING, &data).unwrap())
+    let key = yacme_key::SigningKey::from_pkcs8_pem(
+        &raw,
+        yacme_key::SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256),
+    )
+    .unwrap();
+
+    Ok(key)
 }
 
 const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/test-examples/ec-p255.pem");

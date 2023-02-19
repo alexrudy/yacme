@@ -63,9 +63,3 @@ pub fn thumbprint(key: &EcdsaKeyPair) -> Thumbprint {
 
     Thumbprint(base64_url::encode(&digest))
 }
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SignatureAlgorithm {
-    ES256,
-    HS256,
-}

@@ -5,18 +5,21 @@ use std::{marker::PhantomData, sync::Arc};
 use eyre::Report;
 use http::HeaderMap;
 use reqwest::{Request, Url};
-use ring::signature::{EcdsaKeyPair, KeyPair, Signature};
-use serde::{de, ser, Serialize};
+use serde::{de, ser, Deserialize, Serialize};
 use thiserror::Error;
-
-use crate::key::JWK;
+use yacme_key::Signature;
 
 use super::directory::Directory;
 use super::errors::{AcmeError, AcmeErrorDocument};
-use super::key::SignatureAlgorithm;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
 const CONTENT_JOSE: &str = "application/jose+json";
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SignatureAlgorithm {
+    ES256,
+    HS256,
+}
 
 #[derive(Debug, Serialize)]
 pub struct Nonce(String);
@@ -146,6 +149,15 @@ where
 #[derive(Debug, Clone)]
 pub(super) struct AccountKeyIdentifier(Arc<Url>);
 
+impl ser::Serialize for AccountKeyIdentifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.deref().serialize(serializer)
+    }
+}
+
 impl From<Url> for AccountKeyIdentifier {
     fn from(value: Url) -> Self {
         AccountKeyIdentifier(Arc::new(value))
@@ -165,24 +177,24 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(bound(serialize = "KI: AsRef<[u8]>"))]
-pub(super) struct ProtectedHeader<'k, KI> {
+#[serde(bound(serialize = "KI: Serialize"))]
+pub(super) struct ProtectedHeader<KI> {
     #[serde(rename = "alg")]
     algorithm: SignatureAlgorithm,
     #[serde(rename = "kid", skip_serializing_if = "Option::is_none")]
-    key_id: Option<Base64Data<KI>>,
+    key_id: Option<KI>,
     #[serde(rename = "jwk", skip_serializing_if = "Option::is_none")]
-    web_key: Option<JWK<'k>>,
+    web_key: Option<yacme_key::jwk::Jwk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<Nonce>,
     url: Url,
 }
 
-impl<'k, KI> ProtectedHeader<'k, KI> {
+impl<KI> ProtectedHeader<KI> {
     pub(super) fn new(
         algorithm: SignatureAlgorithm,
-        key_id: Option<Base64Data<KI>>,
-        web_key: Option<JWK<'k>>,
+        key_id: Option<KI>,
+        web_key: Option<yacme_key::jwk::Jwk>,
         url: Url,
         nonce: Option<Nonce>,
     ) -> Self {
@@ -196,13 +208,17 @@ impl<'k, KI> ProtectedHeader<'k, KI> {
     }
 }
 
-type AcmeProtectedHeader<'k> = ProtectedHeader<'k, &'k AccountKeyIdentifier>;
+type AcmeProtectedHeader<'k> = ProtectedHeader<&'k AccountKeyIdentifier>;
 
-impl<'k> ProtectedHeader<'k, &'k AccountKeyIdentifier> {
-    fn new_acme_header(key: &'k EcdsaKeyPair, url: Url, nonce: Nonce) -> AcmeProtectedHeader<'k> {
+impl<'k> ProtectedHeader<&'k AccountKeyIdentifier> {
+    fn new_acme_header(
+        key: &'k yacme_key::SigningKey,
+        url: Url,
+        nonce: Nonce,
+    ) -> AcmeProtectedHeader<'k> {
         Self {
             algorithm: SignatureAlgorithm::ES256,
-            web_key: Some(JWK::new(key)),
+            web_key: Some(key.as_jwk()),
             key_id: None,
             nonce: Some(nonce),
             url,
@@ -217,7 +233,7 @@ impl<'k> ProtectedHeader<'k, &'k AccountKeyIdentifier> {
         Self {
             algorithm: SignatureAlgorithm::ES256,
             web_key: None,
-            key_id: Some(account.into()),
+            key_id: Some(account),
             nonce: Some(nonce),
             url,
         }
@@ -264,27 +280,23 @@ where
 }
 
 #[derive(Debug, Serialize)]
-#[serde(bound(serialize = "P: Serialize, KI: AsRef<[u8]>, S: AsRef<[u8]>"))]
-pub struct SignedToken<'k, P, KI, S> {
-    protected: Base64JSON<ProtectedHeader<'k, KI>>,
+#[serde(bound(serialize = "P: Serialize, KI: Serialize, S: AsRef<[u8]>"))]
+pub struct SignedToken<P, KI, S> {
+    protected: Base64JSON<ProtectedHeader<KI>>,
     payload: Payload<P>,
     signature: Base64Data<S>,
 }
 
 #[derive(Debug, Error)]
-pub(super) enum SigningError<E>
-where
-    E: std::fmt::Display,
-{
-    Signing(#[source] E),
+pub(super) enum SigningError {
+    #[error("signature error")]
+    Signing(#[from] signature::Error),
+    #[error("serialization error: {0}")]
     JsonSerialize(#[source] serde_json::Error),
 }
 
-impl<E> From<SigningError<E>> for AcmeError
-where
-    E: std::fmt::Display + std::fmt::Debug + Sync + Send + 'static,
-{
-    fn from(value: SigningError<E>) -> Self {
+impl From<SigningError> for AcmeError {
+    fn from(value: SigningError) -> Self {
         match value {
             SigningError::Signing(error) => Self::Signing(eyre::Report::msg(error)),
             SigningError::JsonSerialize(error) => Self::ser(error),
@@ -292,13 +304,13 @@ where
     }
 }
 
-pub(super) struct UnsignedToken<'k, P, KI> {
-    protected: Base64JSON<ProtectedHeader<'k, KI>>,
+pub(super) struct UnsignedToken<P, KI> {
+    protected: Base64JSON<ProtectedHeader<KI>>,
     payload: Payload<P>,
 }
 
-impl<'k, KI> UnsignedToken<'k, (), KI> {
-    pub(super) fn get(protected: ProtectedHeader<'k, KI>) -> Self {
+impl<KI> UnsignedToken<(), KI> {
+    pub(super) fn get(protected: ProtectedHeader<KI>) -> Self {
         Self {
             protected: protected.into(),
             payload: Payload::Empty,
@@ -306,8 +318,8 @@ impl<'k, KI> UnsignedToken<'k, (), KI> {
     }
 }
 
-impl<'k, P, KI> UnsignedToken<'k, P, KI> {
-    pub(super) fn post(protected: ProtectedHeader<'k, KI>, payload: P) -> Self {
+impl<P, KI> UnsignedToken<P, KI> {
+    pub(super) fn post(protected: ProtectedHeader<KI>, payload: P) -> Self {
         Self {
             protected: protected.into(),
             payload: payload.into(),
@@ -315,20 +327,12 @@ impl<'k, P, KI> UnsignedToken<'k, P, KI> {
     }
 }
 
-impl<'k, P, KI> UnsignedToken<'k, P, KI>
+impl<P, KI> UnsignedToken<P, KI>
 where
     P: Serialize,
-    KI: AsRef<[u8]>,
+    KI: Serialize,
 {
-    pub(super) fn sign<'m: 'k, F, S, E>(
-        self,
-        f: F,
-    ) -> Result<SignedToken<'k, P, KI, S>, SigningError<E>>
-    where
-        F: FnOnce(&[u8]) -> Result<S, E>,
-        E: std::fmt::Display,
-        S: 'static,
-    {
+    fn signing_input(&self) -> Result<String, SigningError> {
         let header = self
             .protected
             .serialized_value()
@@ -337,29 +341,34 @@ where
             .payload
             .serialized_value()
             .map_err(SigningError::JsonSerialize)?;
-        let message = base64_url::encode(&format!("{header}.{payload}"));
+        let message = format!("{header}.{payload}");
+        Ok(message)
+    }
 
-        let signature = f(message.as_bytes()).map_err(SigningError::Signing)?;
+    pub(super) fn sign<K>(self, key: &K) -> Result<SignedToken<P, KI, Signature>, SigningError>
+    where
+        K: signature::Signer<Signature>,
+    {
+        let message = self.signing_input()?;
+        let signature = key.try_sign(message.as_bytes())?;
         Ok(SignedToken {
             protected: self.protected,
             payload: self.payload,
             signature: signature.into(),
         })
     }
-}
 
-impl<'k, P> UnsignedToken<'k, P, &'k AccountKeyIdentifier>
-where
-    P: Serialize,
-{
-    fn sign_ecdsa<'m: 'k>(
+    pub(super) fn digest<D: signature::digest::Mac>(
         self,
-        rng: &'m dyn ring::rand::SecureRandom,
-        key: &'k EcdsaKeyPair,
-    ) -> Result<SignedToken<'k, P, &'k AccountKeyIdentifier, Signature>, SigningError<Report>> {
-        self.sign(|message| {
-            key.sign(rng, message)
-                .map_err(|_| Report::msg("An unspecified signing error occured"))
+        mut digest: D,
+    ) -> Result<SignedToken<P, KI, Signature>, SigningError> {
+        let message = self.signing_input()?;
+        digest.update(message.as_bytes());
+        let result = digest.finalize();
+        Ok(SignedToken {
+            protected: self.protected,
+            payload: self.payload,
+            signature: Signature::from(result.into_bytes().to_vec()).into(),
         })
     }
 }
@@ -372,7 +381,7 @@ enum InitialDirectory {
 
 pub struct ClientBuilder {
     inner: reqwest::Client,
-    key: Option<Arc<EcdsaKeyPair>>,
+    key: Option<Arc<yacme_key::SigningKey>>,
     directory: Option<InitialDirectory>,
 }
 
@@ -406,7 +415,7 @@ impl ClientBuilder {
         self
     }
 
-    pub fn with_key(mut self, key: Arc<EcdsaKeyPair>) -> Self {
+    pub fn with_key(mut self, key: Arc<yacme_key::SigningKey>) -> Self {
         self.key = Some(key);
         self
     }
@@ -433,7 +442,6 @@ impl ClientBuilder {
             key: self.key.ok_or_else(|| Report::msg("Missing signing key"))?,
             nonce: None,
             directory,
-            rng: Box::new(ring::rand::SystemRandom::new()) as _,
         })
     }
 }
@@ -441,28 +449,26 @@ impl ClientBuilder {
 #[derive(Debug)]
 pub struct Client {
     pub(super) inner: reqwest::Client,
-    key: Arc<EcdsaKeyPair>,
+    key: Arc<yacme_key::SigningKey>,
     nonce: Option<Nonce>,
     pub(super) directory: Directory,
-    rng: Box<dyn ring::rand::SecureRandom>,
 }
 
 impl Client {
     /// Create a new ACME client from a directory
-    pub fn new(key: Arc<EcdsaKeyPair>, directory: Directory) -> Self {
+    pub fn new(key: Arc<yacme_key::SigningKey>, directory: Directory) -> Self {
         Self {
             inner: reqwest::Client::new(),
             key,
             nonce: None,
             directory,
-            rng: Box::new(ring::rand::SystemRandom::new()) as _,
         }
     }
 
     /// Create a new ACME client from the URL for a directory
     /// and a user account key pair.
     pub async fn new_from_directory_url(
-        key: Arc<EcdsaKeyPair>,
+        key: Arc<yacme_key::SigningKey>,
         url: Url,
     ) -> Result<Self, reqwest::Error> {
         let client = reqwest::Client::new();
@@ -475,7 +481,6 @@ impl Client {
             key,
             nonce: None,
             directory,
-            rng: Box::new(ring::rand::SystemRandom::new()) as _,
         })
     }
 
@@ -483,11 +488,11 @@ impl Client {
         ClientBuilder::new()
     }
 
-    pub(super) fn public_key(&self) -> &<EcdsaKeyPair as KeyPair>::PublicKey {
+    pub(super) fn public_key(&self) -> yacme_key::PublicKey {
         self.key.public_key()
     }
 
-    pub(super) fn key(&self) -> &Arc<EcdsaKeyPair> {
+    pub(super) fn key(&self) -> &Arc<yacme_key::SigningKey> {
         &self.key
     }
 }
@@ -523,8 +528,9 @@ impl Client {
         eprintln!("Payload:");
         eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
 
-        let token =
-            UnsignedToken::post(header, payload).sign_ecdsa(self.rng.as_ref(), &self.key)?;
+        let token = UnsignedToken::post(header, payload)
+            .sign(self.key.deref())
+            .unwrap();
 
         eprintln!("Full Token:");
         eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
@@ -567,7 +573,7 @@ impl Client {
         mut request: Request,
         header: AcmeProtectedHeader<'_>,
     ) -> Result<reqwest::Response, AcmeError> {
-        let token = UnsignedToken::get(header).sign_ecdsa(self.rng.as_ref(), &self.key)?;
+        let token = UnsignedToken::get(header).sign(self.key.deref()).unwrap();
 
         let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
 
@@ -667,19 +673,25 @@ mod tests {
             "https://example.com/acme/new-account".parse().unwrap(),
             Nonce(nonce.into()),
         );
+        let public = key.public_key();
         let payload = builder.build_payload(
-            key.public_key(),
+            &public,
             "https://example.com/acme/new-account".parse().unwrap(),
         );
 
         let token = UnsignedToken::post(header, &payload);
-        let rng = ring::rand::SystemRandom::new();
-        let signed_token = token.sign_ecdsa(&rng, &key).unwrap();
+        let signed_token = token.sign(key.deref()).unwrap();
 
         let serialized = serde_json::to_value(signed_token).unwrap();
         let expected = serde_json::from_str::<Value>(crate::example!("new-account.json")).unwrap();
 
-        assert_eq!(serialized["payload"], expected["payload"]);
-        assert_eq!(serialized["protected"], expected["protected"]);
+        assert_eq!(
+            serialized["payload"], expected["payload"],
+            "payload mismatch"
+        );
+        assert_eq!(
+            serialized["protected"], expected["protected"],
+            "header mismatch"
+        );
     }
 }

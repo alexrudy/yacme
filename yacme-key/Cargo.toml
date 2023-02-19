@@ -1,0 +1,15 @@
+[package]
+name = "yacme-key"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+signature = "*"
+elliptic-curve = { version = "*", features = ["pkcs8", "jwk", "arithmetic"] }
+ecdsa = { version = "*", features = ["std", "pkcs8", "pem"] }
+rsa = "*"
+p256 = { version = "*", features = ["pkcs8", "arithmetic", "jwk"] }
+pkcs8 = "*"
+serde = { version = "*", features = ["derive"] }

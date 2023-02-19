@@ -17,7 +17,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
-x509-certificate.workspace = true
+yacme-key = { path = "../yacme-key" }
+signature = "*"
+hmac = "*"
+sha2 = "*"
 
 [dev-dependencies]
 pem-rfc7468 = { version = "0.6.0", features = ["std"] }

@@ -4,20 +4,16 @@ pub mod challenges;
 pub mod directory;
 pub mod errors;
 pub mod identifier;
-mod key;
 pub mod orders;
 mod transport;
 
 pub use account::{Account, AccountInfo};
 pub use errors::AcmeError;
-pub use key::PublicKey;
 pub use transport::Client;
 
 #[cfg(test)]
 pub(crate) mod test {
     use std::sync::Arc;
-
-    use ring::signature::EcdsaKeyPair;
 
     #[macro_export]
     macro_rules! example {
@@ -49,14 +45,14 @@ pub(crate) mod test {
         };
     }
 
-    pub(crate) fn key(private: &str) -> Arc<EcdsaKeyPair> {
-        let (label, data) = pem_rfc7468::decode_vec(private.as_bytes()).unwrap();
-        assert_eq!(label, "PRIVATE KEY");
-
-        Arc::new(
-            EcdsaKeyPair::from_pkcs8(&ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING, &data)
-                .unwrap(),
+    pub(crate) fn key(private: &str) -> Arc<yacme_key::SigningKey> {
+        let key = yacme_key::SigningKey::from_pkcs8_pem(
+            private,
+            yacme_key::SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256),
         )
+        .unwrap();
+
+        Arc::new(key)
     }
 
     pub(crate) fn parse(data: &str) -> http::Response<String> {

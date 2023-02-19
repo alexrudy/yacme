@@ -2,10 +2,10 @@ use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
 use reqwest::{Request, Url};
-use ring::signature::EcdsaKeyPair;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
-use super::{errors::AcmeErrorDocument, key::thumbprint, Account, AcmeError, Client};
+use super::{errors::AcmeErrorDocument, Account, AcmeError, Client};
 
 #[derive(Debug, Deserialize)]
 struct ChallengeInfo {
@@ -73,8 +73,8 @@ pub enum ChallengeStatus {
 pub struct KeyAuthorization(String);
 
 impl KeyAuthorization {
-    fn new(token: &str, key: &EcdsaKeyPair) -> KeyAuthorization {
-        let thumb = thumbprint(key);
+    fn new(token: &str, key: &yacme_key::SigningKey) -> KeyAuthorization {
+        let thumb = key.as_jwk().thumbprint();
         KeyAuthorization(format!("{token}.{thumb}"))
     }
 }
@@ -124,10 +124,7 @@ impl Dns01Challenge {
     }
 
     pub fn digest(&self, account: &Account) -> String {
-        let digest = ring::digest::digest(
-            &ring::digest::SHA256,
-            self.authorization(account).as_bytes(),
-        );
+        let digest = sha2::Sha256::digest(self.authorization(account).as_bytes()).to_vec();
         base64_url::encode(&digest)
     }
 
