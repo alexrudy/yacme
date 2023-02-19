@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 base64-url.workspace = true
-chrono.workspace = true
 eyre.workspace = true
 http.workspace = true
 reqwest.workspace = true
@@ -18,5 +17,3 @@ tracing.workspace = true
 url.workspace = true
 yacme-key.workspace = true
 signature.workspace = true
-hmac.workspace = true
-sha2.workspace = true
