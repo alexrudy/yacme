@@ -1,5 +1,6 @@
 pub mod account;
 pub mod authorizations;
+mod base64;
 pub mod challenges;
 pub mod directory;
 pub mod errors;
