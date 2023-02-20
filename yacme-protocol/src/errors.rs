@@ -1,12 +1,12 @@
 use http::HeaderValue;
 use thiserror::Error;
 
-pub use self::acme::AcmeErrorDocument;
+pub use self::acme::{AcmeErrorCode, AcmeErrorDocument};
 
 #[derive(Debug, Error)]
 pub enum AcmeError {
     #[error("An error occured with the ACME service: {0}")]
-    Acme(#[from] self::acme::AcmeErrorDocument),
+    Acme(#[source] self::acme::AcmeErrorDocument),
     #[error("An error occured during the network request: {0}")]
     HttpRequest(#[from] reqwest::Error),
     #[error("An error occured deserializing JSON: {0}")]
@@ -14,7 +14,7 @@ pub enum AcmeError {
     #[error("An error occured serializing JSON: {0}")]
     JsonSerialize(#[source] serde_json::Error),
     #[error("The nonce header returned was not valid: {0:?}")]
-    InvalidNonce(HeaderValue),
+    InvalidNonce(Option<HeaderValue>),
     #[error("No Nonce header was returned with the request")]
     MissingNonce,
     #[error("An error occured during a network request to fetch a new nonce: {0}")]
@@ -34,6 +34,15 @@ impl AcmeError {
 
     pub fn nonce(error: reqwest::Error) -> Self {
         AcmeError::NonceRequest(error)
+    }
+}
+
+impl From<AcmeErrorDocument> for AcmeError {
+    fn from(value: AcmeErrorDocument) -> Self {
+        match value.kind() {
+            acme::AcmeErrorCode::BadNonce => AcmeError::InvalidNonce(None),
+            acme::AcmeErrorCode::Other(_) => AcmeError::Acme(value),
+        }
     }
 }
 
@@ -63,12 +72,14 @@ mod acme {
 
     #[derive(Debug, Clone)]
     pub enum AcmeErrorCode {
+        BadNonce,
         Other(String),
     }
 
     impl fmt::Display for AcmeErrorCode {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
+                AcmeErrorCode::BadNonce => f.write_str("an invalid nonce was sent"),
                 AcmeErrorCode::Other(message) => f.write_str(message),
             }
         }
@@ -93,8 +104,10 @@ mod acme {
                 tracing::warn!("URN isn't an error: {value}");
             }
 
-            #[allow(clippy::match_single_binding)]
+            eprintln!("URN: {value}");
+
             match value.as_str() {
+                "badNonce" => AcmeErrorCode::BadNonce,
                 _ => AcmeErrorCode::Other(value),
             }
         }

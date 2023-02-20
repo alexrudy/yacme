@@ -1,6 +1,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+use base64ct::Encoding;
 use serde::{de, ser, Serialize};
 
 #[derive(Debug, Clone)]
@@ -20,7 +21,7 @@ where
     where
         S: serde::Serializer,
     {
-        let target = base64_url::encode(&self.0);
+        let target = base64ct::Base64UrlUnpadded::encode_string(self.0.as_ref());
         serializer.serialize_str(&target)
     }
 }
@@ -34,7 +35,7 @@ where
 {
     pub(crate) fn serialized_value(&self) -> Result<String, serde_json::Error> {
         let inner = serde_json::to_vec(&self.0)?;
-        Ok(base64_url::encode(&inner))
+        Ok(base64ct::Base64UrlUnpadded::encode_string(&inner))
     }
 }
 
@@ -60,7 +61,7 @@ where
     where
         E: de::Error,
     {
-        let data = base64_url::decode(v)
+        let data = base64ct::Base64UrlUnpadded::decode_vec(v)
             .map_err(|_| E::invalid_value(de::Unexpected::Str(v), &"invalid base64url encoding"))?;
 
         let data = serde_json::from_slice(&data)

@@ -7,7 +7,7 @@ use reqwest::Request;
 use serde::Serialize;
 
 use crate::directory::Directory;
-use yacme_protocol::errors::{AcmeError, AcmeErrorDocument};
+use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_protocol::jose::AcmeProtectedHeader;
 use yacme_protocol::jose::Nonce;
@@ -168,17 +168,23 @@ impl Client {
         payload: &P,
         header: AcmeProtectedHeader<'_>,
     ) -> Result<reqwest::Response, AcmeError> {
-        eprintln!("ProtectedHeader:");
-        eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
-        eprintln!("Payload:");
-        eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
+        #[cfg(feature = "debug-messages")]
+        {
+            eprintln!("ProtectedHeader:");
+            eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
+            eprintln!("Payload:");
+            eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
+        }
 
         let token = UnsignedToken::post(header, payload)
             .sign(self.key.deref())
             .unwrap();
 
-        eprintln!("Full Token:");
-        eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
+        #[cfg(feature = "debug-messages")]
+        {
+            eprintln!("Full Token:");
+            eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
+        }
 
         let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
 
@@ -228,10 +234,24 @@ impl Client {
         *request.method_mut() = http::Method::POST;
         *request.body_mut() = Some(body.into());
 
-        let response = self.inner.execute(request).await?;
-        self.record_nonce(response.headers())?;
+        loop {
+            let response = self.inner.execute(request.try_clone().unwrap()).await?;
+            self.record_nonce(response.headers())?;
 
-        Ok(response)
+            if response.status().is_success() {
+                return Ok(response);
+            } else {
+                let body = response.bytes().await?;
+                let error: AcmeErrorDocument =
+                    serde_json::from_slice(&body).map_err(AcmeError::de)?;
+
+                if matches!(error.kind(), AcmeErrorCode::BadNonce) {
+                    tracing::trace!("Retrying request with next nonce");
+                } else {
+                    return Err(error.into());
+                }
+            }
+        }
     }
 
     pub(super) async fn account_get(
@@ -258,7 +278,7 @@ fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {
     Ok(Nonce::from(
         value
             .to_str()
-            .map_err(|_| AcmeError::InvalidNonce(value.clone()))?
+            .map_err(|_| AcmeError::InvalidNonce(Some(value.clone())))?
             .to_owned(),
     ))
 }

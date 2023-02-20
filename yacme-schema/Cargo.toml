@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64-url.workspace = true
+base64ct.workspace = true
 chrono.workspace = true
 eyre.workspace = true
 http.workspace = true
@@ -20,6 +20,9 @@ signature.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 yacme-protocol.workspace = true
+
+[features]
+debug-messages = []
 
 [dev-dependencies]
 pem-rfc7468.workspace = true

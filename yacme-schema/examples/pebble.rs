@@ -7,10 +7,13 @@
 //! yourself.
 
 use std::io::{self, Read};
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
 use reqwest::Certificate;
+use serde::Serialize;
+use yacme_schema::challenges::Challenge;
 use yacme_schema::Client;
 use yacme_schema::Order;
 
@@ -82,6 +85,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let order = client.order(&account, order_request).await?;
     println!("Order: {order:#?}");
+
+    let authz_url = order
+        .authorizations()
+        .first()
+        .expect("at least one authorization");
+    let authz = client.authorization(&account, authz_url.clone()).await?;
+    println!("Authz: {authz:#?}");
+
+    let challenge = authz
+        .challenges
+        .iter()
+        .filter_map(|c| match c {
+            Challenge::Http01(challenge) => Some(challenge),
+            _ => None,
+        })
+        .next()
+        .unwrap();
+    println!("Solving challenge {challenge:#?}");
+
+    #[derive(Debug, Serialize)]
+    struct Http01ChallengeSetup {
+        token: String,
+        content: String,
+    }
+
+    let chall_setup = Http01ChallengeSetup {
+        token: challenge.token().into(),
+        content: challenge.authorization(&account).deref().to_owned(),
+    };
+
+    eprintln!(
+        "Challenge: {}",
+        serde_json::to_string(&chall_setup).unwrap()
+    );
+
+    let resp = reqwest::Client::new()
+        .post("http://localhost:8055/add-http01")
+        .json(&chall_setup)
+        .send()
+        .await?;
+    match resp.error_for_status_ref() {
+        Ok(_) => {}
+        Err(_) => {
+            eprintln!("Request:");
+            eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
+            eprintln!("ERROR:");
+            eprintln!("Status: {:?}", resp.status().canonical_reason());
+            eprintln!("{}", resp.text().await?);
+            panic!("Failed to update challenge server");
+        }
+    }
+
+    let updated_chall = client
+        .challenge_ready(&account, Challenge::Http01(challenge.clone()))
+        .await?;
+    println!("Marked challenge ready: {updated_chall:#?}");
+
+    loop {
+        let authz = client.authorization(&account, authz_url.clone()).await?;
+        let challenge = authz
+            .challenges
+            .iter()
+            .filter_map(|c| match c {
+                Challenge::Http01(challenge) => Some(challenge),
+                _ => None,
+            })
+            .next()
+            .unwrap();
+        eprintln!("Checking challenge {challenge:#?}");
+
+        if challenge.is_finished() {
+            eprintln!("Completed authorization");
+            eprintln!("{:#?}", authz);
+            break;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
 
     Ok(())
 }

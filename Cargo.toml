@@ -2,7 +2,7 @@
 members = ["yacme-*"]
 
 [workspace.dependencies]
-base64-url = "1.4.13"
+base64ct = { version = "^1.5.3", features = ["alloc"] }
 chrono = { version = "0.4.23", features = ["serde"] }
 eyre = "0.6.8"
 http = "0.2.9"
