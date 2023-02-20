@@ -2,7 +2,7 @@
 
 This is a yak-shave project to get an ACME client in rust that I like, and to learn more about ACME, and internet protocol cryptography in general.
 
-This probably isn't good for production use, but it is based on the work of [RustCrypto](github.com/RustCrypto) who make good stuff.
+This probably isn't good for production use, but it is based on the work of [RustCrypto](https://github.com/RustCrypto) who make good stuff.
 
 ## Getting Started
 
