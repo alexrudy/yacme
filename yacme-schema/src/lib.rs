@@ -38,7 +38,7 @@ pub(crate) mod test {
         ($name:tt) => {
             $crate::test::key(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/test-examples/",
+                "/../reference-keys/",
                 $name,
                 ".pem"
             )))

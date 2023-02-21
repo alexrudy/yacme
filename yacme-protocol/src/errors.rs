@@ -104,10 +104,12 @@ mod acme {
                 tracing::warn!("URN isn't an error: {value}");
             }
 
+            let tag = urn.into_iter().nth(5);
             eprintln!("URN: {value}");
+            eprintln!("URN Tag: {tag:?}");
 
-            match value.as_str() {
-                "badNonce" => AcmeErrorCode::BadNonce,
+            match tag {
+                Some("badNonce") => AcmeErrorCode::BadNonce,
                 _ => AcmeErrorCode::Other(value),
             }
         }

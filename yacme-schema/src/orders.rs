@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use yacme_key::cert::SignedCertificateRequest;
+use yacme_key::SigningKey;
+use yacme_protocol::Base64Data;
 
 use crate::account::Account;
 use crate::client::Client;
@@ -86,6 +89,17 @@ struct NewOrderRequest {
     identifiers: Vec<Identifier>,
     not_before: Option<DateTime<Utc>>,
     not_after: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FinalizeOrderRequest {
+    csr: Base64Data<SignedCertificateRequest>,
+}
+
+impl From<SignedCertificateRequest> for FinalizeOrderRequest {
+    fn from(value: SignedCertificateRequest) -> Self {
+        FinalizeOrderRequest { csr: value.into() }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -175,8 +189,23 @@ impl Client {
         &mut self,
         account: &Account,
         order: Order,
+        certificate_key: &SigningKey,
     ) -> Result<Order, AcmeError> {
-        todo!("Finalize order")
+        let mut csr = yacme_key::cert::CertificateSigningRequest::new();
+
+        for name in order.identifiers().iter().cloned() {
+            csr.push(name);
+        }
+        let signed_csr = csr.sign(certificate_key);
+
+        let payload: FinalizeOrderRequest = signed_csr.into();
+
+        let request = reqwest::Request::new(http::Method::POST, order.finalize().clone().into());
+        let response = self
+            .account_post(account.key_identifier(), request, &payload)
+            .await?;
+
+        Ok(response.json().await.expect("valid order JSON"))
     }
 
     #[allow(unused_variables)]
@@ -184,8 +213,8 @@ impl Client {
         &mut self,
         account: &Account,
         order: &Order,
-    ) -> Result<Vec<()>, AcmeError> {
-        todo!("Download the certificate as X509 data")
+    ) -> Result<x509_cert::Certificate, AcmeError> {
+        todo!();
     }
 }
 

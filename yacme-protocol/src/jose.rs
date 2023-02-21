@@ -16,7 +16,7 @@ pub enum SignatureAlgorithm {
     HS256,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Nonce(String);
 
 impl AsRef<str> for Nonce {
@@ -61,7 +61,7 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(bound(serialize = "KI: Serialize"))]
 pub struct ProtectedHeader<KI> {
     #[serde(rename = "alg")]
@@ -90,6 +90,10 @@ impl<KI> ProtectedHeader<KI> {
             nonce,
             url,
         }
+    }
+
+    pub fn replace_nonce(&mut self, nonce: Nonce) {
+        self.nonce = Some(nonce);
     }
 }
 

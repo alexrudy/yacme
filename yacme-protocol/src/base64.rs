@@ -5,7 +5,7 @@ use base64ct::Encoding;
 use serde::{de, ser, Serialize};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Base64Data<T>(pub T);
+pub struct Base64Data<T>(pub T);
 
 impl<T> From<T> for Base64Data<T> {
     fn from(value: T) -> Self {
@@ -27,7 +27,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Base64JSON<T>(pub T);
+pub struct Base64JSON<T>(pub T);
 
 impl<T> Base64JSON<T>
 where

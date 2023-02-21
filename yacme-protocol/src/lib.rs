@@ -4,6 +4,7 @@ mod base64;
 pub mod errors;
 pub mod jose;
 
+pub use base64::{Base64Data, Base64JSON};
 pub use errors::AcmeError;
 use serde::{Deserialize, Serialize};
 

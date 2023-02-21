@@ -166,38 +166,53 @@ impl Client {
         &mut self,
         mut request: Request,
         payload: &P,
-        header: AcmeProtectedHeader<'_>,
+        mut header: AcmeProtectedHeader<'_>,
     ) -> Result<reqwest::Response, AcmeError> {
-        #[cfg(feature = "debug-messages")]
-        {
-            eprintln!("ProtectedHeader:");
-            eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
-            eprintln!("Payload:");
-            eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
+        for _i in 0..5 {
+            #[cfg(feature = "debug-messages")]
+            {
+                eprintln!("ProtectedHeader:");
+                eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
+                eprintln!("Payload:");
+                eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
+            }
+
+            let token = UnsignedToken::post(header.clone(), payload)
+                .sign(self.key.deref())
+                .unwrap();
+
+            #[cfg(feature = "debug-messages")]
+            {
+                eprintln!("Full Token:");
+                eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
+            }
+
+            let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
+
+            request
+                .headers_mut()
+                .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
+            *request.method_mut() = http::Method::POST;
+            *request.body_mut() = Some(body.into());
+            let response = self.inner.execute(request.try_clone().unwrap()).await?;
+            self.record_nonce(response.headers())?;
+
+            if response.status().is_success() {
+                return Ok(response);
+            } else {
+                let body = response.bytes().await?;
+                let error: AcmeErrorDocument =
+                    serde_json::from_slice(&body).map_err(AcmeError::de)?;
+
+                if matches!(error.kind(), AcmeErrorCode::BadNonce) {
+                    tracing::trace!("Retrying request with next nonce");
+                    header.replace_nonce(self.get_nonce().await?);
+                } else {
+                    return Err(error.into());
+                }
+            }
         }
-
-        let token = UnsignedToken::post(header, payload)
-            .sign(self.key.deref())
-            .unwrap();
-
-        #[cfg(feature = "debug-messages")]
-        {
-            eprintln!("Full Token:");
-            eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
-        }
-
-        let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
-
-        request
-            .headers_mut()
-            .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
-        *request.method_mut() = http::Method::POST;
-        *request.body_mut() = Some(body.into());
-
-        let response = self.inner.execute(request).await?;
-        self.record_nonce(response.headers())?;
-
-        Ok(response)
+        Err(AcmeError::MissingNonce)
     }
 
     pub(super) async fn account_post<P: Serialize>(
@@ -222,19 +237,19 @@ impl Client {
     async fn execute_get(
         &mut self,
         mut request: Request,
-        header: AcmeProtectedHeader<'_>,
+        mut header: AcmeProtectedHeader<'_>,
     ) -> Result<reqwest::Response, AcmeError> {
-        let token = UnsignedToken::get(header).sign(self.key.deref()).unwrap();
+        for _i in 0..5 {
+            let token = UnsignedToken::get(header.clone())
+                .sign(self.key.deref())
+                .unwrap();
+            let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
+            request
+                .headers_mut()
+                .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
+            *request.method_mut() = http::Method::POST;
+            *request.body_mut() = Some(body.into());
 
-        let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
-
-        request
-            .headers_mut()
-            .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
-        *request.method_mut() = http::Method::POST;
-        *request.body_mut() = Some(body.into());
-
-        loop {
             let response = self.inner.execute(request.try_clone().unwrap()).await?;
             self.record_nonce(response.headers())?;
 
@@ -247,11 +262,14 @@ impl Client {
 
                 if matches!(error.kind(), AcmeErrorCode::BadNonce) {
                     tracing::trace!("Retrying request with next nonce");
+                    header.replace_nonce(self.get_nonce().await?)
                 } else {
                     return Err(error.into());
                 }
             }
         }
+
+        Err(AcmeError::MissingNonce)
     }
 
     pub(super) async fn account_get(
