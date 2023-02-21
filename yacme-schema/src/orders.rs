@@ -2,11 +2,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use yacme_key::cert::SignedCertificateRequest;
 use yacme_key::SigningKey;
+use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_protocol::Base64Data;
 
 use crate::account::Account;
 use crate::client::Client;
 use crate::identifier::Identifier;
+use crate::Response;
 use yacme_protocol::errors::AcmeError;
 use yacme_protocol::errors::AcmeErrorDocument;
 use yacme_protocol::Url;
@@ -143,15 +145,16 @@ impl Client {
     pub async fn orders(
         &mut self,
         account: &Account,
+        account_identifier: &AccountKeyIdentifier,
         limit: Option<usize>,
     ) -> Result<Vec<Url>, AcmeError> {
         let mut orders = Vec::new();
-        let mut url = account.info().orders.clone();
+        let mut url = account.orders.clone();
         let mut page = 0;
         loop {
             tracing::debug!("Fetching orders, page {page}");
             let request = reqwest::Request::new(http::Method::POST, url.into());
-            let response = self.account_get(account.key_identifier(), request).await?;
+            let response = self.account_get(account_identifier, request).await?;
             let orders_page: Orders = response.json().await?;
             orders.extend(orders_page.orders.into_iter());
 
@@ -171,26 +174,27 @@ impl Client {
 
     pub async fn order(
         &mut self,
-        account: &Account,
+        account_identifier: &AccountKeyIdentifier,
         order: OrderBuilder,
-    ) -> Result<Order, AcmeError> {
+    ) -> Result<Response<Order>, AcmeError> {
         let request =
             reqwest::Request::new(http::Method::POST, self.directory.new_order.clone().into());
         let payload = order.build();
         let response = self
-            .account_post(account.key_identifier(), request, &payload)
+            .account_post(account_identifier, request, &payload)
             .await?;
 
-        Ok(response.json().await.expect("valid order JSON"))
+        Response::from_response(response).await
     }
 
     #[allow(unused_variables)]
     pub async fn order_finalize(
         &mut self,
         account: &Account,
-        order: Order,
+        account_identifier: &AccountKeyIdentifier,
+        order: &Order,
         certificate_key: &SigningKey,
-    ) -> Result<Order, AcmeError> {
+    ) -> Result<Response<Order>, AcmeError> {
         let mut csr = yacme_key::cert::CertificateSigningRequest::new();
 
         for name in order.identifiers().iter().cloned() {
@@ -202,10 +206,10 @@ impl Client {
 
         let request = reqwest::Request::new(http::Method::POST, order.finalize().clone().into());
         let response = self
-            .account_post(account.key_identifier(), request, &payload)
+            .account_post(account_identifier, request, &payload)
             .await?;
 
-        Ok(response.json().await.expect("valid order JSON"))
+        Response::from_response(response).await
     }
 
     #[allow(unused_variables)]

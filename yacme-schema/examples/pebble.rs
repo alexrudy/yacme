@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use reqwest::Certificate;
 use serde::Serialize;
+use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_schema::challenges::Challenge;
 use yacme_schema::orders::OrderStatus;
 use yacme_schema::Client;
@@ -72,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = Client::builder()
         .with_client(rclient)
         .with_directory_url(DIRECTORY.parse().unwrap())
-        .with_key(key)
+        .with_key(key.clone())
         .build()
         .await?;
 
@@ -84,24 +85,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Requesting account");
     let account = client.create_account(account_request).await?;
     println!("Account: {account:#?}");
+    let account_id: AccountKeyIdentifier = account.location().unwrap().into();
 
     tracing::info!("Requesting order");
     let mut order_request = Order::builder();
     order_request.dns("www.example.test");
 
-    let order = client.order(&account, order_request).await?;
+    let order = client.order(&account_id, order_request).await?;
     println!("Order: {order:#?}");
 
     tracing::info!("Finding challenge");
 
     let authz_url = order
+        .payload()
         .authorizations()
         .first()
         .expect("at least one authorization");
-    let authz = client.authorization(&account, authz_url.clone()).await?;
+    let authz = client.authorization(&account_id, authz_url.clone()).await?;
     println!("Authz: {authz:#?}");
 
     let challenge = authz
+        .payload()
         .challenges
         .iter()
         .filter_map(|c| match c {
@@ -123,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let chall_setup = Http01ChallengeSetup {
             token: challenge.token().into(),
-            content: challenge.authorization(&account).deref().to_owned(),
+            content: challenge.authorization(&key).deref().to_owned(),
         };
 
         eprintln!(
@@ -149,14 +153,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let updated_chall = client
-            .challenge_ready(&account, Challenge::Http01(challenge.clone()))
+            .challenge_ready(&account_id, Challenge::Http01(challenge.clone()))
             .await?;
         println!("Marked challenge ready: {updated_chall:#?}");
 
         loop {
             eprintln!("Fetching latest authorization");
-            let authz = client.authorization(&account, authz_url.clone()).await?;
+            let authz = client.authorization(&account_id, authz_url.clone()).await?;
             let challenge = authz
+                .payload()
                 .challenges
                 .iter()
                 .filter_map(|c| match c {
@@ -180,15 +185,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Loading certificate private key from {CERTIFICATE_KEY_PATH:?}");
     let key = Arc::new(read_private_key(CERTIFICATE_KEY_PATH)?);
 
-    let order = client.order_finalize(&account, order, &key).await?;
+    let order = client
+        .order_finalize(account.payload(), &account_id, order.payload(), &key)
+        .await?;
     eprintln!("Finalized order: {:?}", order.status());
     eprintln!("Order: {order:#?}");
 
-    if !matches!(order.status(), OrderStatus::Ready) {
+    if !matches!(order.payload().status(), OrderStatus::Ready) {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 
-    let cert = client.download_certificate(&account, &order).await?;
+    let cert = client
+        .download_certificate(account.payload(), order.payload())
+        .await?;
 
     Ok(())
 }

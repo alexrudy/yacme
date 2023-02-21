@@ -5,8 +5,10 @@ pub mod client;
 pub mod directory;
 pub mod identifier;
 pub mod orders;
+mod response;
 
-pub use account::{Account, AccountInfo};
+pub use crate::response::Response;
+pub use account::Account;
 pub use client::Client;
 pub use identifier::Identifier;
 pub use orders::Order;

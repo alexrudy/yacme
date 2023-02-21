@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use yacme_protocol::jose::AccountKeyIdentifier;
 
 use crate::challenges::Challenge;
 use crate::client::Client;
 use crate::identifier::Identifier;
-use crate::Account;
+use crate::Response;
 use yacme_protocol::AcmeError;
 use yacme_protocol::Url;
 
@@ -40,15 +41,13 @@ pub enum AuthroizationStatus {
 impl Client {
     pub async fn authorization(
         &mut self,
-        account: &Account,
+        account_key: &AccountKeyIdentifier,
         url: Url,
-    ) -> Result<Authorization, AcmeError> {
+    ) -> Result<Response<Authorization>, AcmeError> {
         let request = reqwest::Request::new(http::Method::POST, url.into());
-        let response = self.account_get(account.key_identifier(), request).await?;
+        let response = self.account_get(account_key, request).await?;
 
-        let body = response.bytes().await?;
-        let auth: Authorization = serde_json::from_slice(&body).map_err(AcmeError::de)?;
-        Ok(auth)
+        Response::from_response(response).await
     }
 }
 

@@ -136,10 +136,6 @@ impl Client {
     pub(super) fn public_key(&self) -> yacme_key::PublicKey {
         self.key.public_key()
     }
-
-    pub(super) fn key(&self) -> &Arc<yacme_key::SigningKey> {
-        &self.key
-    }
 }
 
 impl Client {

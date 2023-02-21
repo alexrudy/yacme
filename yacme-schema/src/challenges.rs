@@ -6,8 +6,9 @@ use reqwest::Request;
 use serde::ser::SerializeMap;
 use serde::{ser, Deserialize, Serialize};
 use sha2::Digest;
+use yacme_key::SigningKey;
+use yacme_protocol::jose::AccountKeyIdentifier;
 
-use crate::account::Account;
 use crate::client::Client;
 use yacme_protocol::Url;
 use yacme_protocol::{errors::AcmeErrorDocument, AcmeError};
@@ -110,8 +111,8 @@ impl Http01Challenge {
         format!(".well-known/acme-challenge/{}", self.token)
     }
 
-    pub fn authorization(&self, account: &Account) -> KeyAuthorization {
-        KeyAuthorization::new(&self.token, account.key())
+    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+        KeyAuthorization::new(&self.token, account_key)
     }
 
     fn info(&self) -> Option<&ChallengeInfo> {
@@ -154,13 +155,13 @@ impl Dns01Challenge {
         format!("_acme-challenge.{domain}")
     }
 
-    pub fn digest(&self, account: &Account) -> String {
-        let digest = sha2::Sha256::digest(self.authorization(account).as_bytes());
+    pub fn digest(&self, account_key: &SigningKey) -> String {
+        let digest = sha2::Sha256::digest(self.authorization(account_key).as_bytes());
         base64ct::Base64UrlUnpadded::encode_string(&digest)
     }
 
-    pub fn authorization(&self, account: &Account) -> KeyAuthorization {
-        KeyAuthorization::new(&self.token, account.key())
+    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+        KeyAuthorization::new(&self.token, account_key)
     }
 }
 
@@ -180,14 +181,14 @@ impl ser::Serialize for ChallengeReadyRequest {
 impl Client {
     pub async fn challenge_ready(
         &mut self,
-        account: &Account,
+        account_identifier: &AccountKeyIdentifier,
         challenge: Challenge,
     ) -> Result<Challenge, AcmeError> {
         let url = challenge.info().unwrap().url().clone();
         let request = Request::new(http::Method::POST, url.into());
         let payload = ChallengeReadyRequest::default();
         let response = self
-            .account_post(account.key_identifier(), request, &payload)
+            .account_post(account_identifier, request, &payload)
             .await?;
 
         let body = response.bytes().await?;
