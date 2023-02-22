@@ -5,10 +5,6 @@ use yacme_key::jwk::Jwk;
 use yacme_key::PublicKey;
 use yacme_key::Signature;
 
-use crate::client::Client;
-use crate::Response;
-use yacme_protocol::errors::AcmeError;
-use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_protocol::jose::ProtectedHeader;
 use yacme_protocol::jose::SignatureAlgorithm;
 use yacme_protocol::jose::SignedToken;
@@ -103,7 +99,7 @@ pub enum AccountStatus {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateAccount {
+pub struct CreateAccount {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     contact: Vec<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,7 +161,7 @@ impl AccountBuilder {
         Ok(self.add_contact_url(url))
     }
 
-    fn build(self, public_key: &PublicKey, url: Url) -> CreateAccount {
+    pub fn build(self, public_key: &PublicKey, url: Url) -> CreateAccount {
         CreateAccount {
             contact: self.contact,
             terms_of_service_agreed: self.terms_of_service_agreed,
@@ -181,44 +177,13 @@ impl AccountBuilder {
         CreateAccountPayload(self.build(public_key, url))
     }
 
-    fn update(self) -> CreateAccount {
+    pub fn update(self) -> CreateAccount {
         CreateAccount {
             contact: self.contact,
             terms_of_service_agreed: None,
             only_return_existing: None,
             external_account_binding: None,
         }
-    }
-}
-
-impl Client {
-    pub async fn create_account(
-        &mut self,
-        account: AccountBuilder,
-    ) -> Result<Response<Account>, AcmeError> {
-        let request = reqwest::Request::new(
-            http::Method::POST,
-            self.directory.new_account.clone().into(),
-        );
-        let key = self.public_key();
-        let payload = account.build(&key, self.directory.new_account.clone());
-        let response = self.key_post(request, &payload).await?;
-
-        Response::from_response(response).await
-    }
-
-    pub async fn update_account(
-        &mut self,
-        key_identifier: &AccountKeyIdentifier,
-        updates: AccountBuilder,
-    ) -> Result<Response<Account>, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, key_identifier.to_url().into());
-
-        let response = self
-            .account_post(key_identifier, request, &updates.update())
-            .await?;
-
-        Response::from_response(response).await
     }
 }
 

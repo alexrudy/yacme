@@ -198,7 +198,7 @@ pub struct UnsignedToken<P, KI> {
     payload: Payload<P>,
 }
 
-impl<KI> UnsignedToken<(), KI> {
+impl<P, KI> UnsignedToken<P, KI> {
     pub fn get(protected: ProtectedHeader<KI>) -> Self {
         Self {
             protected: protected.into(),

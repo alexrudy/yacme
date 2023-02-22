@@ -1,13 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use yacme_protocol::jose::AccountKeyIdentifier;
 
 use crate::challenges::Challenge;
-use crate::client::Client;
 use crate::identifier::Identifier;
-use crate::Response;
-use yacme_protocol::AcmeError;
-use yacme_protocol::Url;
 
 ///
 ///   An ACME authorization object represents a server’s authorization for
@@ -36,19 +31,6 @@ pub enum AuthroizationStatus {
     Deactivated,
     Expired,
     Revoked,
-}
-
-impl Client {
-    pub async fn authorization(
-        &mut self,
-        account_key: &AccountKeyIdentifier,
-        url: Url,
-    ) -> Result<Response<Authorization>, AcmeError> {
-        let request = reqwest::Request::new(http::Method::POST, url.into());
-        let response = self.account_get(account_key, request).await?;
-
-        Response::from_response(response).await
-    }
 }
 
 #[cfg(test)]

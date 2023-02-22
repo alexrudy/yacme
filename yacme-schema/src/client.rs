@@ -1,33 +1,17 @@
-use std::ops::Deref;
-use std::sync::Arc;
-
-use eyre::Report;
 use http::HeaderMap;
-use reqwest::Request;
-use serde::Serialize;
+use reqwest::Certificate;
+use serde::{de::DeserializeOwned, Serialize};
 
-use crate::directory::Directory;
+use crate::{Request, Response};
 use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
-use yacme_protocol::jose::AccountKeyIdentifier;
-use yacme_protocol::jose::AcmeProtectedHeader;
 use yacme_protocol::jose::Nonce;
-use yacme_protocol::jose::ProtectedHeader;
-use yacme_protocol::jose::UnsignedToken;
 use yacme_protocol::Url;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
-const CONTENT_JOSE: &str = "application/jose+json";
-
-#[allow(clippy::large_enum_variant)]
-enum InitialDirectory {
-    Fetch(Url),
-    Directory(Directory),
-}
 
 pub struct ClientBuilder {
-    inner: reqwest::Client,
-    key: Option<Arc<yacme_key::SigningKey>>,
-    directory: Option<InitialDirectory>,
+    inner: reqwest::ClientBuilder,
+    new_nonce: Option<Url>,
 }
 
 impl Default for ClientBuilder {
@@ -39,54 +23,36 @@ impl Default for ClientBuilder {
 impl ClientBuilder {
     pub fn new() -> Self {
         ClientBuilder {
-            inner: reqwest::Client::new(),
-            key: None,
-            directory: None,
+            inner: reqwest::Client::builder(),
+            new_nonce: None,
         }
     }
 
-    pub fn with_client(mut self, client: reqwest::Client) -> Self {
-        self.inner = client;
+    pub fn with_nonce_url(mut self, url: Url) -> Self {
+        self.new_nonce = Some(url);
         self
     }
 
-    pub fn with_directory_url(mut self, url: Url) -> Self {
-        self.directory = Some(InitialDirectory::Fetch(url));
+    pub fn add_root_certificate(mut self, cert: Certificate) -> Self {
+        self.inner = self.inner.add_root_certificate(cert);
         self
     }
 
-    pub fn with_directory(mut self, directory: Directory) -> Self {
-        self.directory = Some(InitialDirectory::Directory(directory));
+    pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.inner = self.inner.timeout(timeout);
         self
     }
 
-    pub fn with_key(mut self, key: Arc<yacme_key::SigningKey>) -> Self {
-        self.key = Some(key);
+    pub fn connect_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.inner = self.inner.connect_timeout(timeout);
         self
     }
 
-    pub async fn build(self) -> Result<Client, Report> {
-        let directory = match self
-            .directory
-            .ok_or_else(|| Report::msg("Missing directory"))?
-        {
-            InitialDirectory::Fetch(url) => {
-                self.inner
-                    .get(url.as_str())
-                    .send()
-                    .await?
-                    .error_for_status()?
-                    .json()
-                    .await?
-            }
-            InitialDirectory::Directory(directory) => directory,
-        };
-
+    pub fn build(self) -> Result<Client, reqwest::Error> {
         Ok(Client {
-            inner: self.inner,
-            key: self.key.ok_or_else(|| Report::msg("Missing signing key"))?,
+            inner: self.inner.build()?,
             nonce: None,
-            directory,
+            new_nonce: self.new_nonce.unwrap(),
         })
     }
 }
@@ -94,107 +60,37 @@ impl ClientBuilder {
 #[derive(Debug)]
 pub struct Client {
     pub(super) inner: reqwest::Client,
-    key: Arc<yacme_key::SigningKey>,
     nonce: Option<Nonce>,
-    pub(super) directory: Directory,
+    new_nonce: Url,
 }
 
 impl Client {
-    /// Create a new ACME client from a directory
-    pub fn new(key: Arc<yacme_key::SigningKey>, directory: Directory) -> Self {
-        Self {
-            inner: reqwest::Client::new(),
-            key,
-            nonce: None,
-            directory,
-        }
-    }
-
-    /// Create a new ACME client from the URL for a directory
-    /// and a user account key pair.
-    pub async fn new_from_directory_url(
-        key: Arc<yacme_key::SigningKey>,
-        url: Url,
-    ) -> Result<Self, reqwest::Error> {
-        let client = reqwest::Client::new();
-        let response = client.get(url.as_str()).send().await?.error_for_status()?;
-
-        let directory = response.json().await?;
-
-        Ok(Self {
-            inner: client,
-            key,
-            nonce: None,
-            directory,
-        })
-    }
-
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
-
-    pub(super) fn public_key(&self) -> yacme_key::PublicKey {
-        self.key.public_key()
-    }
 }
 
 impl Client {
-    pub(super) async fn key_post<P: Serialize>(
-        &mut self,
-        request: Request,
-        payload: &P,
-    ) -> Result<reqwest::Response, AcmeError> {
-        let nonce = self.get_nonce().await?;
-        let key = self.key.clone();
-        let header = ProtectedHeader::new_acme_header(&key, request.url().clone().into(), nonce);
-
-        let response = self.execute_post(request, payload, header).await?;
-        if response.status().is_success() {
-            Ok(response)
-        } else {
-            let body = response.bytes().await?;
-            let error: AcmeErrorDocument = serde_json::from_slice(&body).map_err(AcmeError::de)?;
-            Err(error.into())
-        }
+    pub async fn get<R>(&mut self, url: Url) -> Result<Response<R>, AcmeError>
+    where
+        R: DeserializeOwned,
+    {
+        let response = self.inner.get(url.as_str()).send().await?;
+        Response::from_response(response).await
     }
 
-    async fn execute_post<P: Serialize>(
-        &mut self,
-        mut request: Request,
-        payload: &P,
-        mut header: AcmeProtectedHeader<'_>,
-    ) -> Result<reqwest::Response, AcmeError> {
-        for _i in 0..5 {
-            #[cfg(feature = "debug-messages")]
-            {
-                eprintln!("ProtectedHeader:");
-                eprintln!("{}", serde_json::to_string_pretty(&header).unwrap());
-                eprintln!("Payload:");
-                eprintln!("{}", serde_json::to_string_pretty(payload).unwrap());
-            }
-
-            let token = UnsignedToken::post(header.clone(), payload)
-                .sign(self.key.deref())
-                .unwrap();
-
-            #[cfg(feature = "debug-messages")]
-            {
-                eprintln!("Full Token:");
-                eprintln!("{}", serde_json::to_string_pretty(&token).unwrap());
-            }
-
-            let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
-
-            request
-                .headers_mut()
-                .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
-            *request.method_mut() = http::Method::POST;
-            *request.body_mut() = Some(body.into());
-            let response = self.inner.execute(request.try_clone().unwrap()).await?;
+    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    where
+        P: Serialize,
+        R: DeserializeOwned,
+    {
+        let mut nonce = self.get_nonce().await?;
+        loop {
+            let signed = request.sign(nonce)?;
+            let response = self.inner.execute(signed.into_inner()).await?;
             self.record_nonce(response.headers())?;
-
             if response.status().is_success() {
-                return Ok(response);
+                return Response::from_response(response).await;
             } else {
                 let body = response.bytes().await?;
                 let error: AcmeErrorDocument =
@@ -202,87 +98,11 @@ impl Client {
 
                 if matches!(error.kind(), AcmeErrorCode::BadNonce) {
                     tracing::trace!("Retrying request with next nonce");
-                    header.replace_nonce(self.get_nonce().await?);
+                    nonce = self.get_nonce().await?;
                 } else {
                     return Err(error.into());
                 }
             }
-        }
-        Err(AcmeError::MissingNonce)
-    }
-
-    pub(super) async fn account_post<P: Serialize>(
-        &mut self,
-        account: &AccountKeyIdentifier,
-        request: Request,
-        payload: &P,
-    ) -> Result<reqwest::Response, AcmeError> {
-        let nonce = self.get_nonce().await?;
-        let header =
-            ProtectedHeader::new_acme_account_header(account, request.url().clone().into(), nonce);
-        let response = self.execute_post(request, payload, header).await?;
-        if response.status().is_success() {
-            Ok(response)
-        } else {
-            let body = response.bytes().await?;
-            let error: AcmeErrorDocument = serde_json::from_slice(&body).map_err(AcmeError::de)?;
-            Err(error.into())
-        }
-    }
-
-    async fn execute_get(
-        &mut self,
-        mut request: Request,
-        mut header: AcmeProtectedHeader<'_>,
-    ) -> Result<reqwest::Response, AcmeError> {
-        for _i in 0..5 {
-            let token = UnsignedToken::get(header.clone())
-                .sign(self.key.deref())
-                .unwrap();
-            let body = serde_json::to_vec(&token).map_err(AcmeError::ser)?;
-            request
-                .headers_mut()
-                .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
-            *request.method_mut() = http::Method::POST;
-            *request.body_mut() = Some(body.into());
-
-            let response = self.inner.execute(request.try_clone().unwrap()).await?;
-            self.record_nonce(response.headers())?;
-
-            if response.status().is_success() {
-                return Ok(response);
-            } else {
-                let body = response.bytes().await?;
-                let error: AcmeErrorDocument =
-                    serde_json::from_slice(&body).map_err(AcmeError::de)?;
-
-                if matches!(error.kind(), AcmeErrorCode::BadNonce) {
-                    tracing::trace!("Retrying request with next nonce");
-                    header.replace_nonce(self.get_nonce().await?)
-                } else {
-                    return Err(error.into());
-                }
-            }
-        }
-
-        Err(AcmeError::MissingNonce)
-    }
-
-    pub(super) async fn account_get(
-        &mut self,
-        account: &AccountKeyIdentifier,
-        request: Request,
-    ) -> Result<reqwest::Response, AcmeError> {
-        let nonce = self.get_nonce().await?;
-        let header =
-            ProtectedHeader::new_acme_account_header(account, request.url().clone().into(), nonce);
-        let response = self.execute_get(request, header).await?;
-        if response.status().is_success() {
-            Ok(response)
-        } else {
-            let body = response.bytes().await?;
-            let error: AcmeErrorDocument = serde_json::from_slice(&body).map_err(AcmeError::de)?;
-            Err(error.into())
         }
     }
 }
@@ -311,7 +131,7 @@ impl Client {
         tracing::debug!("Requesting a new nonce");
         let response = self
             .inner
-            .head(self.directory.new_nonce.clone().as_str())
+            .head(self.new_nonce.as_str())
             .send()
             .await
             .map_err(AcmeError::nonce)?;
@@ -325,7 +145,10 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use serde_json::Value;
+    use yacme_protocol::jose::{ProtectedHeader, UnsignedToken};
 
     use super::*;
 

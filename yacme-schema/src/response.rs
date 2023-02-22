@@ -67,4 +67,8 @@ where
     pub fn payload(&self) -> &T {
         &self.payload
     }
+
+    pub fn into_inner(self) -> T {
+        self.payload
+    }
 }
