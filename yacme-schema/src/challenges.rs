@@ -10,7 +10,7 @@ use yacme_key::SigningKey;
 use yacme_protocol::errors::AcmeErrorDocument;
 use yacme_protocol::Url;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ChallengeInfo {
     url: Url,
     status: ChallengeStatus,
@@ -20,7 +20,7 @@ struct ChallengeInfo {
     error: Option<AcmeErrorDocument>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Challenge {
     #[serde(rename = "http-01")]
@@ -68,7 +68,7 @@ impl Challenge {
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeStatus {
     Pending,
@@ -94,7 +94,7 @@ impl Deref for KeyAuthorization {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Http01Challenge {
     #[serde(flatten)]
     info: ChallengeInfo,
@@ -144,7 +144,7 @@ impl Http01Challenge {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dns01Challenge {
     #[serde(flatten)]
     info: ChallengeInfo,

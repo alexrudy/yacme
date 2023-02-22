@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::challenges::Challenge;
 use crate::identifier::Identifier;
@@ -11,7 +11,7 @@ use crate::identifier::Identifier;
 ///   as the status of the authorization (e.g., "pending", "valid", or
 ///   "revoked") and which challenges were used to validate possession of
 ///   the identifier.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Authorization {
     pub identifier: Identifier,
     pub status: AuthroizationStatus,
@@ -22,7 +22,7 @@ pub struct Authorization {
     pub wildcard: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthroizationStatus {
     Pending,

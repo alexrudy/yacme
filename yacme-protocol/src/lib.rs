@@ -1,7 +1,8 @@
-use std::{fmt, str::FromStr};
+use std::str::FromStr;
 
 mod base64;
 pub mod errors;
+pub mod fmt;
 pub mod jose;
 
 pub use base64::{Base64Data, Base64JSON};
@@ -14,6 +15,14 @@ pub struct Url(url::Url);
 impl Url {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+
+    pub fn path(&self) -> &str {
+        self.0.path()
+    }
+
+    pub fn host(&self) -> Option<&str> {
+        self.0.host_str()
     }
 }
 
@@ -35,8 +44,8 @@ impl AsRef<str> for Url {
     }
 }
 
-impl fmt::Debug for Url {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for Url {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Url").field(&self.0.as_str()).finish()
     }
 }

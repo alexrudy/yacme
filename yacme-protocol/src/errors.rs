@@ -49,10 +49,10 @@ impl From<AcmeErrorDocument> for AcmeError {
 mod acme {
     use std::fmt;
 
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    #[derive(Debug, Clone, Error, Deserialize)]
+    #[derive(Debug, Clone, Error, Serialize, Deserialize)]
     #[serde(from = "RawErrorInfo")]
     #[error("{code}: {detail}")]
     pub struct AcmeErrorDocument {
@@ -70,7 +70,7 @@ mod acme {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Serialize, Clone)]
     pub enum AcmeErrorCode {
         BadNonce,
         Other(String),
@@ -105,8 +105,6 @@ mod acme {
             }
 
             let tag = urn.into_iter().nth(5);
-            eprintln!("URN: {value}");
-            eprintln!("URN Tag: {tag:?}");
 
             match tag {
                 Some("badNonce") => AcmeErrorCode::BadNonce,

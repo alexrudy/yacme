@@ -39,7 +39,7 @@ impl From<&str> for ExternalAccountId {
 
 /// The token used to bind an external account based on a Key from
 /// the provider.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
 
 // Create alias for HMAC-SHA256
@@ -72,7 +72,7 @@ impl ExternalAccountBindingRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub status: AccountStatus,
@@ -89,7 +89,7 @@ impl Account {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountStatus {
     Valid,
@@ -97,7 +97,7 @@ pub enum AccountStatus {
     Revoked,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAccount {
     #[serde(skip_serializing_if = "Vec::is_empty")]
