@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Write};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -6,6 +7,7 @@ use thiserror::Error;
 
 use super::base64::{Base64Data, Base64JSON};
 use super::errors::AcmeError;
+use crate::fmt;
 use crate::Url;
 
 use yacme_key::Signature;
@@ -16,7 +18,16 @@ pub enum SignatureAlgorithm {
     HS256,
 }
 
-#[derive(Debug, Serialize)]
+impl std::fmt::Display for SignatureAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SignatureAlgorithm::ES256 => f.write_str("ES256"),
+            SignatureAlgorithm::HS256 => f.write_str("HS256"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Nonce(String);
 
 impl AsRef<str> for Nonce {
@@ -61,7 +72,7 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(bound(serialize = "KI: Serialize"))]
 pub struct ProtectedHeader<KI> {
     #[serde(rename = "alg")]
@@ -73,6 +84,33 @@ pub struct ProtectedHeader<KI> {
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<Nonce>,
     url: Url,
+}
+
+impl<KI> fmt::AcmeFormat for ProtectedHeader<KI>
+where
+    KI: Serialize,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
+        let mut structure = serde_json::Map::default();
+
+        structure.insert("alg".to_owned(), self.algorithm.to_string().into());
+        if let Some(key_id) = &self.key_id {
+            structure.insert("kid".to_owned(), serde_json::to_value(key_id).unwrap());
+        }
+        if let Some(jwk) = &self.web_key {
+            structure.insert("jwk".to_owned(), serde_json::to_value(jwk).unwrap());
+        }
+
+        if let Some(nonce) = &self.nonce {
+            structure.insert("nonce".to_owned(), nonce.0.clone().into());
+        }
+
+        structure.insert("url".to_owned(), self.url.as_str().to_owned().into());
+
+        let structure = serde_json::Value::Object(structure);
+
+        f.write_json(&structure)
+    }
 }
 
 impl<KI> ProtectedHeader<KI> {
@@ -90,6 +128,10 @@ impl<KI> ProtectedHeader<KI> {
             nonce,
             url,
         }
+    }
+
+    pub fn replace_nonce(&mut self, nonce: Nonce) {
+        self.nonce = Some(nonce);
     }
 }
 
@@ -129,6 +171,18 @@ impl<'k> ProtectedHeader<&'k AccountKeyIdentifier> {
 enum Payload<P> {
     Json(Base64JSON<P>),
     Empty,
+}
+
+impl<P> fmt::AcmeFormat for Payload<P>
+where
+    P: Serialize,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
+        match self {
+            Payload::Json(data) => <Base64JSON<P> as fmt::AcmeFormat>::fmt(data, f),
+            Payload::Empty => f.write_str("\"\""),
+        }
+    }
 }
 
 impl<P> Payload<P>
@@ -172,6 +226,17 @@ pub struct SignedToken<P, KI, S> {
     signature: Base64Data<S>,
 }
 
+impl<P, KI, S> fmt::AcmeFormat for SignedToken<P, KI, S>
+where
+    P: Serialize,
+    KI: Debug + Serialize,
+    S: AsRef<[u8]>,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
+        fmt_token(f, &self.protected, &self.payload, Some(&self.signature))
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SigningError {
     #[error("signature error")]
@@ -194,7 +259,7 @@ pub struct UnsignedToken<P, KI> {
     payload: Payload<P>,
 }
 
-impl<KI> UnsignedToken<(), KI> {
+impl<P, KI> UnsignedToken<P, KI> {
     pub fn get(protected: ProtectedHeader<KI>) -> Self {
         Self {
             protected: protected.into(),
@@ -256,4 +321,49 @@ where
             signature: Signature::from(result.into_bytes().to_vec()).into(),
         })
     }
+}
+
+impl<P, KI> fmt::AcmeFormat for UnsignedToken<P, KI>
+where
+    P: Serialize,
+    KI: Debug + Serialize,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
+        fmt_token::<_, _, [u8; 0], _>(f, &self.protected, &self.payload, None)
+    }
+}
+
+fn fmt_token<P, KI, S, W>(
+    f: &mut fmt::IndentWriter<'_, W>,
+    header: &Base64JSON<ProtectedHeader<KI>>,
+    payload: &Payload<P>,
+    signature: Option<&Base64Data<S>>,
+) -> fmt::Result
+where
+    P: Serialize,
+    KI: Debug + Serialize,
+    S: AsRef<[u8]>,
+    W: fmt::Write,
+{
+    writeln!(f, "{{")?;
+    {
+        let mut f = f.indent();
+        write!(f, "\"protected\": ")?;
+        <Base64JSON<ProtectedHeader<KI>> as fmt::AcmeFormat>::fmt_indented_skip_first(
+            header, &mut f,
+        )?;
+        writeln!(f, ",")?;
+        write!(f, "\"payload\": ")?;
+        <Payload<P> as fmt::AcmeFormat>::fmt_indented_skip_first(payload, &mut f)?;
+        writeln!(f, ",")?;
+        write!(f, "\"signature\": ")?;
+        if let Some(signature) = signature {
+            <Base64Data<S> as fmt::AcmeFormat>::fmt_indented_skip_first(signature, &mut f)?;
+        } else {
+            write!(f, "\"<signature>\"")?;
+        }
+    }
+    writeln!(f)?;
+    writeln!(f, "}}")?;
+    Ok(())
 }

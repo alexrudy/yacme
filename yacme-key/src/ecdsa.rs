@@ -1,3 +1,9 @@
+use const_oid::AssociatedOid;
+// use digest::Digest;
+use elliptic_curve::sec1::ToEncodedPoint;
+// use elliptic_curve::ALGORITHM_OID;
+// use pkcs8::AssociatedOid;
+
 use crate::{PublicKeyAlgorithm, Signature};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +43,28 @@ impl crate::SigningKeyAlgorithm for EcdsaSigningKey {
             EcdsaSigningKey::P256(key) => Box::new(EcdsaPublicKey::from(key.public_key())).into(),
         }
     }
+
+    fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ecdsa::Error> {
+        match self {
+            EcdsaSigningKey::P256(key) => {
+                let signature = <::ecdsa::SigningKey<p256::NistP256> as signature::DigestSigner<
+                    sha2::Sha256,
+                    ::ecdsa::Signature<p256::NistP256>,
+                >>::try_sign_digest(&key.into(), digest)?;
+                let bytes = signature.to_vec();
+                Ok(Signature(bytes))
+            }
+        }
+    }
+
+    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+        match self {
+            EcdsaSigningKey::P256(_) => pkcs8::AlgorithmIdentifier {
+                oid: const_oid::db::rfc5912::ECDSA_WITH_SHA_256,
+                parameters: None,
+            },
+        }
+    }
 }
 
 impl EcdsaSigningKey {
@@ -67,6 +95,21 @@ impl PublicKeyAlgorithm for EcdsaPublicKey {
     fn as_jwk(&self) -> crate::jwk::Jwk {
         match self {
             EcdsaPublicKey::P256(key) => key.to_jwk().into(),
+        }
+    }
+
+    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+        match self {
+            EcdsaPublicKey::P256(_) => pkcs8::AlgorithmIdentifier {
+                oid: const_oid::db::rfc5912::ID_EC_PUBLIC_KEY,
+                parameters: Some((&p256::NistP256::OID).into()),
+            },
+        }
+    }
+
+    fn as_bytes(&self) -> Vec<u8> {
+        match self {
+            EcdsaPublicKey::P256(key) => key.to_encoded_point(false).as_ref().into(),
         }
     }
 }

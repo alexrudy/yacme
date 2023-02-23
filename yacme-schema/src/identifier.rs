@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use yacme_key::cert::RequestedSubjectName;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Identifier {
     Dns {
@@ -12,5 +13,13 @@ pub enum Identifier {
 impl Identifier {
     pub fn dns(hostname: String) -> Identifier {
         Self::Dns { value: hostname }
+    }
+}
+
+impl From<Identifier> for RequestedSubjectName {
+    fn from(value: Identifier) -> Self {
+        match value {
+            Identifier::Dns { value } => RequestedSubjectName::Dns(value),
+        }
     }
 }

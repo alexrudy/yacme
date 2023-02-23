@@ -18,6 +18,7 @@ use sha2::Digest;
 ///
 /// Along with serialization, JWK exposes a [Jwk::thumbprint] method for computing
 /// the key thumbprint required for ACME authorization challenges.
+#[derive(Clone)]
 pub struct Jwk(InnerJwk);
 
 impl fmt::Debug for Jwk {
@@ -29,7 +30,7 @@ impl fmt::Debug for Jwk {
 impl Jwk {
     pub fn thumbprint(&self) -> String {
         let thumb = serde_json::to_vec(&self).expect("Valid JSON format");
-        eprintln!("JWK: {}", std::str::from_utf8(&thumb).unwrap());
+        // eprintln!("JWK: {}", std::str::from_utf8(&thumb).unwrap());
 
         let mut hasher = sha2::Sha256::new();
         hasher.update(&thumb);
@@ -38,6 +39,7 @@ impl Jwk {
     }
 }
 
+#[derive(Clone)]
 enum InnerJwk {
     EllipticCurve(elliptic_curve::JwkEcKey),
 }

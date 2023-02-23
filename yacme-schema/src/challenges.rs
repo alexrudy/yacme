@@ -2,17 +2,15 @@ use std::ops::Deref;
 
 use base64ct::Encoding;
 use chrono::{DateTime, Utc};
-use reqwest::Request;
 use serde::ser::SerializeMap;
 use serde::{ser, Deserialize, Serialize};
 use sha2::Digest;
+use yacme_key::SigningKey;
 
-use crate::account::Account;
-use crate::client::Client;
+use yacme_protocol::errors::AcmeErrorDocument;
 use yacme_protocol::Url;
-use yacme_protocol::{errors::AcmeErrorDocument, AcmeError};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ChallengeInfo {
     url: Url,
     status: ChallengeStatus,
@@ -22,13 +20,7 @@ struct ChallengeInfo {
     error: Option<AcmeErrorDocument>,
 }
 
-impl ChallengeInfo {
-    fn url(&self) -> &Url {
-        &self.url
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Challenge {
     #[serde(rename = "http-01")]
@@ -46,6 +38,14 @@ impl Challenge {
             Challenge::Dns01(dns) => Some(&dns.info),
             _ => None,
         }
+    }
+
+    pub fn url(&self) -> Option<Url> {
+        self.info().map(|i| i.url.clone())
+    }
+
+    pub fn status(&self) -> Option<ChallengeStatus> {
+        self.info().map(|i| i.status)
     }
 
     pub fn is_finished(&self) -> bool {
@@ -68,7 +68,7 @@ impl Challenge {
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeStatus {
     Pending,
@@ -94,7 +94,7 @@ impl Deref for KeyAuthorization {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Http01Challenge {
     #[serde(flatten)]
     info: ChallengeInfo,
@@ -106,12 +106,18 @@ impl Http01Challenge {
         &self.token
     }
 
-    pub fn url(&self) -> String {
+    pub fn target_url(&self) -> Url {
         format!(".well-known/acme-challenge/{}", self.token)
+            .parse()
+            .unwrap()
     }
 
-    pub fn authorization(&self, account: &Account) -> KeyAuthorization {
-        KeyAuthorization::new(&self.token, account.key())
+    pub fn url(&self) -> Url {
+        self.info.url.clone()
+    }
+
+    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+        KeyAuthorization::new(&self.token, account_key)
     }
 
     fn info(&self) -> Option<&ChallengeInfo> {
@@ -138,7 +144,7 @@ impl Http01Challenge {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dns01Challenge {
     #[serde(flatten)]
     info: ChallengeInfo,
@@ -154,18 +160,18 @@ impl Dns01Challenge {
         format!("_acme-challenge.{domain}")
     }
 
-    pub fn digest(&self, account: &Account) -> String {
-        let digest = sha2::Sha256::digest(self.authorization(account).as_bytes());
+    pub fn digest(&self, account_key: &SigningKey) -> String {
+        let digest = sha2::Sha256::digest(self.authorization(account_key).as_bytes());
         base64ct::Base64UrlUnpadded::encode_string(&digest)
     }
 
-    pub fn authorization(&self, account: &Account) -> KeyAuthorization {
-        KeyAuthorization::new(&self.token, account.key())
+    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+        KeyAuthorization::new(&self.token, account_key)
     }
 }
 
 #[derive(Debug, Default)]
-struct ChallengeReadyRequest;
+pub struct ChallengeReadyRequest;
 
 impl ser::Serialize for ChallengeReadyRequest {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -174,25 +180,5 @@ impl ser::Serialize for ChallengeReadyRequest {
     {
         let map = serializer.serialize_map(Some(0))?;
         map.end()
-    }
-}
-
-impl Client {
-    pub async fn challenge_ready(
-        &mut self,
-        account: &Account,
-        challenge: Challenge,
-    ) -> Result<Challenge, AcmeError> {
-        let url = challenge.info().unwrap().url().clone();
-        let request = Request::new(http::Method::POST, url.into());
-        let payload = ChallengeReadyRequest::default();
-        let response = self
-            .account_post(account.key_identifier(), request, &payload)
-            .await?;
-
-        let body = response.bytes().await?;
-        let challenge: Challenge = serde_json::from_slice(&body).map_err(AcmeError::de)?;
-
-        Ok(challenge)
     }
 }

@@ -11,11 +11,15 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use reqwest::Certificate;
+use reqwest::Url;
 use serde::Serialize;
-use yacme_schema::challenges::Challenge;
-use yacme_schema::Client;
-use yacme_schema::Order;
+use yacme_protocol::jose::AccountKeyIdentifier;
+use yacme_protocol::{Client, Request, Response};
+use yacme_schema::authorizations::Authorization;
+use yacme_schema::challenges::{Challenge, ChallengeReadyRequest};
+use yacme_schema::directory::Directory;
+use yacme_schema::orders::{CertificateChain, FinalizeOrder, OrderStatus};
+use yacme_schema::{Account, Order};
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 
@@ -45,7 +49,12 @@ fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme_key::SigningKey
     Ok(key)
 }
 
-const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/test-examples/ec-p255.pem");
+const PRIVATE_KEY_PATH: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../reference-keys/ec-p255.pem");
+const CERTIFICATE_KEY_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../reference-keys/ec-p255-cert.pem"
+);
 const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pebble/pebble.minica.pem");
 
 #[tokio::main]
@@ -53,98 +62,74 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     println!("Loading root certificate from {PEBBLE_ROOT_CA}");
-    let cert = Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
-    let rclient = reqwest::Client::builder()
-        .add_root_certificate(cert)
+    let cert = reqwest::Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
+    let client = reqwest::Client::builder()
+        .add_root_certificate(cert.clone())
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
 
-    println!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
+    tracing::info!("Fetching directory");
+    let directory: Directory = client
+        .get::<Url>(DIRECTORY.parse().unwrap())
+        .send()
+        .await?
+        .json()
+        .await?;
 
     // Client maintains synchronous state, and so requires a mutable / exclusive reference.
     let mut client = Client::builder()
-        .with_client(rclient)
-        .with_directory_url(DIRECTORY.parse().unwrap())
-        .with_key(key)
-        .build()
-        .await?;
+        .add_root_certificate(cert)
+        .timeout(std::time::Duration::from_secs(30))
+        .with_nonce_url(directory.new_nonce.clone())
+        .build()?;
+
+    tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
+    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
 
     // Step 1: Get an account
+    tracing::info!("Requesting account");
     let account_request = yacme_schema::Account::builder()
         .add_contact_email("hello@example.test")
         .unwrap()
-        .agree_to_terms_of_service();
-    tracing::info!("Requesting account");
-    let account = client.create_account(account_request).await?;
-    println!("Account: {account:#?}");
+        .agree_to_terms_of_service()
+        .build(&key.public_key(), directory.new_account.clone());
+    let account: Response<Account> = client
+        .execute(Request::post(
+            account_request,
+            directory.new_account.clone(),
+            key.clone(),
+        ))
+        .await?;
+
+    tracing::debug!("Account: {account:#?}");
+    let account_id: AccountKeyIdentifier = account.location().unwrap().into();
+    let account_key = (key.clone(), account_id);
 
     tracing::info!("Requesting order");
     let mut order_request = Order::builder();
     order_request.dns("www.example.test");
+    order_request.dns("internal.example.test");
 
-    let order = client.order(&account, order_request).await?;
-    println!("Order: {order:#?}");
-
-    let authz_url = order
-        .authorizations()
-        .first()
-        .expect("at least one authorization");
-    let authz = client.authorization(&account, authz_url.clone()).await?;
-    println!("Authz: {authz:#?}");
-
-    let challenge = authz
-        .challenges
-        .iter()
-        .filter_map(|c| match c {
-            Challenge::Http01(challenge) => Some(challenge),
-            _ => None,
-        })
-        .next()
-        .unwrap();
-    println!("Solving challenge {challenge:#?}");
-
-    #[derive(Debug, Serialize)]
-    struct Http01ChallengeSetup {
-        token: String,
-        content: String,
-    }
-
-    let chall_setup = Http01ChallengeSetup {
-        token: challenge.token().into(),
-        content: challenge.authorization(&account).deref().to_owned(),
-    };
-
-    eprintln!(
-        "Challenge: {}",
-        serde_json::to_string(&chall_setup).unwrap()
-    );
-
-    let resp = reqwest::Client::new()
-        .post("http://localhost:8055/add-http01")
-        .json(&chall_setup)
-        .send()
+    let order: Response<Order> = client
+        .execute(Request::post(
+            order_request.build(),
+            directory.new_order.clone(),
+            account_key.clone(),
+        ))
         .await?;
-    match resp.error_for_status_ref() {
-        Ok(_) => {}
-        Err(_) => {
-            eprintln!("Request:");
-            eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
-            eprintln!("ERROR:");
-            eprintln!("Status: {:?}", resp.status().canonical_reason());
-            eprintln!("{}", resp.text().await?);
-            panic!("Failed to update challenge server");
-        }
-    }
 
-    let updated_chall = client
-        .challenge_ready(&account, Challenge::Http01(challenge.clone()))
-        .await?;
-    println!("Marked challenge ready: {updated_chall:#?}");
+    let order_url = order.location().expect("New order should have a location");
+    tracing::debug!("Order: {order:#?}");
 
-    loop {
-        let authz = client.authorization(&account, authz_url.clone()).await?;
+    tracing::info!("Completing Authorizations");
+    for authz_url in order.payload().authorizations() {
+        let authz = client
+            .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
+            .await?;
+        tracing::debug!("Authz: {authz:#?}");
+
         let challenge = authz
+            .payload()
             .challenges
             .iter()
             .filter_map(|c| match c {
@@ -153,15 +138,113 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
             .next()
             .unwrap();
-        eprintln!("Checking challenge {challenge:#?}");
 
-        if challenge.is_finished() {
-            eprintln!("Completed authorization");
-            eprintln!("{:#?}", authz);
-            break;
+        if !challenge.is_finished() {
+            tracing::info!("Solving challenge");
+            tracing::debug!("Challenge: {:#?}", challenge);
+
+            #[derive(Debug, Serialize)]
+            struct Http01ChallengeSetup {
+                token: String,
+                content: String,
+            }
+
+            let chall_setup = Http01ChallengeSetup {
+                token: challenge.token().into(),
+                content: challenge.authorization(&key).deref().to_owned(),
+            };
+
+            tracing::debug!(
+                "Challenge Setup: {}",
+                serde_json::to_string(&chall_setup).unwrap()
+            );
+
+            let resp = reqwest::Client::new()
+                .post("http://localhost:8055/add-http01")
+                .json(&chall_setup)
+                .send()
+                .await?;
+            match resp.error_for_status_ref() {
+                Ok(_) => {}
+                Err(_) => {
+                    eprintln!("Request:");
+                    eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
+                    eprintln!("ERROR:");
+                    eprintln!("Status: {:?}", resp.status().canonical_reason());
+                    eprintln!("{}", resp.text().await?);
+                    panic!("Failed to update challenge server");
+                }
+            }
+
+            let challenge = client
+                .execute::<_, Challenge>(Request::post(
+                    ChallengeReadyRequest::default(),
+                    challenge.url(),
+                    account_key.clone(),
+                ))
+                .await?;
+
+            tracing::debug!("Marked challenge ready: {challenge:#?}");
         }
 
+        loop {
+            tracing::debug!("Fetching authorization");
+
+            let authz = client
+                .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
+                .await?;
+            tracing::debug!("Authz: {authz:#?}");
+
+            let challenge = authz
+                .payload()
+                .challenges
+                .iter()
+                .find(|c| c.url() == Some(challenge.url()))
+                .unwrap();
+
+            tracing::debug!("Checking challenge {challenge:#?}");
+
+            if challenge.is_finished() {
+                tracing::info!("Completed authorization");
+                tracing::debug!("{:#?}", authz);
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    }
+    tracing::info!("Finalizing order");
+    println!("Loading certificate private key from {CERTIFICATE_KEY_PATH:?}");
+    let key = Arc::new(read_private_key(CERTIFICATE_KEY_PATH)?);
+    let finalize = FinalizeOrder::new(order.payload(), &key);
+    let mut order = client
+        .execute::<_, Order>(Request::post(
+            finalize,
+            order.payload().finalize().clone(),
+            account_key.clone(),
+        ))
+        .await?;
+
+    tracing::info!("Finalized order: {:?}", order.status());
+    tracing::debug!("Order: {order:#?}");
+
+    while matches!(order.payload().status(), OrderStatus::Processing) {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        order = client
+            .execute(Request::get(order_url.clone(), account_key.clone()))
+            .await?;
+        tracing::debug!("Order status: {:?}", order.payload().status());
+    }
+
+    if let Some(certificate) = order.payload().certificate() {
+        tracing::info!("Fetching certificate");
+        let _cert = client
+            .execute::<_, CertificateChain>(Request::get(certificate.clone(), account_key.clone()))
+            .await?;
+
+        tracing::info!("Save certificate chain here");
+    } else {
+        tracing::warn!("Certificate was never finalized");
     }
 
     Ok(())

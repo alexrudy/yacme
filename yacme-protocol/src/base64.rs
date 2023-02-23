@@ -1,11 +1,13 @@
-use std::fmt;
+use std::fmt::Write;
 use std::marker::PhantomData;
 
 use base64ct::Encoding;
 use serde::{de, ser, Serialize};
 
+use crate::fmt::{self, IndentWriter};
+
 #[derive(Debug, Clone)]
-pub(crate) struct Base64Data<T>(pub T);
+pub struct Base64Data<T>(pub T);
 
 impl<T> From<T> for Base64Data<T> {
     fn from(value: T) -> Self {
@@ -26,8 +28,21 @@ where
     }
 }
 
+impl<T> fmt::AcmeFormat for Base64Data<T>
+where
+    T: AsRef<[u8]>,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result {
+        write!(
+            f,
+            "b64\"{}\"",
+            base64ct::Base64UrlUnpadded::encode_string(self.0.as_ref())
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
-pub(crate) struct Base64JSON<T>(pub T);
+pub struct Base64JSON<T>(pub T);
 
 impl<T> Base64JSON<T>
 where
@@ -45,6 +60,17 @@ impl<T> From<T> for Base64JSON<T> {
     }
 }
 
+impl<T> fmt::AcmeFormat for Base64JSON<T>
+where
+    T: Serialize,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result {
+        write!(f, "base64url(")?;
+        f.write_json(&self.0)?;
+        f.write_str(")")
+    }
+}
+
 struct Base64JSONVisitor<T>(PhantomData<T>);
 
 impl<'de, T> de::Visitor<'de> for Base64JSONVisitor<T>
@@ -53,7 +79,7 @@ where
 {
     type Value = Base64JSON<T>;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> fmt::Result {
         formatter.write_str("a base64url encoded type")
     }
 

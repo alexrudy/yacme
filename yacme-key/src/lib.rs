@@ -8,6 +8,7 @@
 
 use std::fmt;
 
+pub mod cert;
 mod ecdsa;
 pub mod jwk;
 
@@ -50,6 +51,13 @@ impl PublicKey {
     /// challenges.
     pub fn to_jwk(&self) -> crate::jwk::Jwk {
         self.0.as_jwk()
+    }
+
+    pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+        self.0.algorithm()
+    }
+    pub fn as_bytes(&self) -> Vec<u8> {
+        self.0.as_bytes()
     }
 }
 
@@ -134,11 +142,21 @@ impl SigningKey {
     pub fn as_jwk(&self) -> crate::jwk::Jwk {
         self.0.as_jwk()
     }
+
+    pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+        self.0.algorithm()
+    }
 }
 
 impl signature::Signer<Signature> for SigningKey {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, ::ecdsa::Error> {
         self.0.try_sign(msg)
+    }
+}
+
+impl signature::DigestSigner<sha2::Sha256, Signature> for SigningKey {
+    fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error> {
+        self.0.try_sign_digest(digest)
     }
 }
 
@@ -159,12 +177,26 @@ impl InnerSigningKey {
             InnerSigningKey::Ecdsa(ecdsa) => ecdsa.public_key(),
         }
     }
+
+    pub(crate) fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+        match self {
+            InnerSigningKey::Ecdsa(ecdsa) => ecdsa.algorithm(),
+        }
+    }
 }
 
 impl signature::Signer<Signature> for InnerSigningKey {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, ::ecdsa::Error> {
         match self {
             InnerSigningKey::Ecdsa(key) => key.try_sign(msg),
+        }
+    }
+}
+
+impl signature::DigestSigner<sha2::Sha256, Signature> for InnerSigningKey {
+    fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error> {
+        match self {
+            InnerSigningKey::Ecdsa(key) => key.try_sign_digest(digest),
         }
     }
 }
@@ -180,8 +212,39 @@ impl fmt::Debug for InnerSigningKey {
 pub(crate) trait SigningKeyAlgorithm: signature::Signer<Signature> {
     fn as_jwk(&self) -> crate::jwk::Jwk;
     fn public_key(&self) -> PublicKey;
+    fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error>;
+    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
 }
 
 pub(crate) trait PublicKeyAlgorithm {
     fn as_jwk(&self) -> crate::jwk::Jwk;
+    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
+    fn as_bytes(&self) -> Vec<u8>;
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    #[macro_export]
+    macro_rules! key {
+        ($name:tt) => {
+            $crate::test::key(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../reference-keys/",
+                $name,
+                ".pem"
+            )))
+        };
+    }
+
+    pub(crate) fn key(private: &str) -> Arc<crate::SigningKey> {
+        let key = crate::SigningKey::from_pkcs8_pem(
+            private,
+            crate::SignatureKind::Ecdsa(crate::EcdsaAlgorithm::P256),
+        )
+        .unwrap();
+
+        Arc::new(key)
+    }
 }

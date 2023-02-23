@@ -20,6 +20,10 @@ signature.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 yacme-protocol.workspace = true
+x509-cert.workspace = true
+der.workspace = true
+ouroboros.workspace = true
+pem-rfc7468.workspace = true
 
 [features]
 debug-messages = []

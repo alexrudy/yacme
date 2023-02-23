@@ -1,13 +1,11 @@
 pub mod account;
 pub mod authorizations;
 pub mod challenges;
-pub mod client;
 pub mod directory;
 pub mod identifier;
 pub mod orders;
 
-pub use account::{Account, AccountInfo};
-pub use client::Client;
+pub use account::Account;
 pub use identifier::Identifier;
 pub use orders::Order;
 
@@ -38,7 +36,7 @@ pub(crate) mod test {
         ($name:tt) => {
             $crate::test::key(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/test-examples/",
+                "/../reference-keys/",
                 $name,
                 ".pem"
             )))
