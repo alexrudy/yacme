@@ -2,10 +2,13 @@ use http::HeaderMap;
 use reqwest::Certificate;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{Request, Response};
+use crate::{request, Request, Response};
 use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use yacme_protocol::jose::Nonce;
 use yacme_protocol::Url;
+
+#[cfg(feature = "debug-messages")]
+use yacme_protocol::fmt::AcmeFormat;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
 
@@ -79,13 +82,41 @@ impl Client {
         Response::from_response(response).await
     }
 
+    #[cfg(not(feature = "debug-messages"))]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    where
+        P: Serialize,
+        R: DeserializeOwned,
+    {
+        self.execute_internal(request).await
+    }
+
+    #[cfg(feature = "debug-messages")]
+    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    where
+        P: Serialize,
+        R: DeserializeOwned + Serialize,
+    {
+        self.execute_internal(request).await.map(|r| {
+            eprintln!("{}", r.formatted());
+            r
+        })
+    }
+
+    async fn execute_internal<P, R>(
+        &mut self,
+        request: Request<P>,
+    ) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: DeserializeOwned,
     {
         let mut nonce = self.get_nonce().await?;
         loop {
+            #[cfg(feature = "debug-messages")]
+            {
+                eprintln!("{}", request.as_signed().formatted());
+            }
             let signed = request.sign(nonce)?;
             let response = self.inner.execute(signed.into_inner()).await?;
             self.record_nonce(response.headers())?;

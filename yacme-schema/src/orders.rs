@@ -12,7 +12,7 @@ use yacme_protocol::errors::AcmeError;
 use yacme_protocol::errors::AcmeErrorDocument;
 use yacme_protocol::Url;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Orders {
     orders: Vec<Url>,
     #[serde(default)]

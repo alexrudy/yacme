@@ -111,8 +111,6 @@ impl CertificateSigningRequest {
             attributes,
         };
 
-        eprintln!("{:#?}", csr_info);
-
         let csr_target = csr_info.to_vec().expect("Valid encoding");
         let mut digest = sha2::Sha256::new();
         digest.update(&csr_target);
@@ -127,11 +125,6 @@ impl CertificateSigningRequest {
 
         let mut buf = Vec::new();
         csr.encode_to_vec(&mut buf).expect("successful encoding");
-
-        let data =
-            pem_rfc7468::encode_string("CERTIFICATE REQUEST", base64ct::LineEnding::LF, &buf)
-                .unwrap();
-        eprintln!("{data}");
 
         SignedCertificateRequest(buf)
     }
