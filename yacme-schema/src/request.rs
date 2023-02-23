@@ -153,7 +153,7 @@ where
 
     fn acme_format_preamble<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
         let method = match &self.method {
-            Method::Get => "GET",
+            Method::Get => "POST as GET",
             Method::Post(_) => "POST",
         };
         let path = self.url.path();

@@ -1,11 +1,9 @@
 use std::fmt::Write;
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 
-use yacme_protocol::{
-    fmt::{self, HttpCase},
-    AcmeError, Url,
-};
+use yacme_protocol::fmt::{self, HttpCase};
+use yacme_protocol::{AcmeError, Url};
 
 use crate::request::Encode;
 

@@ -11,7 +11,6 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use der::EncodePem;
 use reqwest::Url;
 use serde::Serialize;
 use yacme_protocol::jose::AccountKeyIdentifier;
