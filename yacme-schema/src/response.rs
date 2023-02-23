@@ -1,9 +1,26 @@
-use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Write;
+
+use serde::{de::DeserializeOwned, Serialize};
+
 use yacme_protocol::{
     fmt::{self, HttpCase},
     AcmeError, Url,
 };
+
+use crate::request::Encode;
+
+pub trait Decode: Sized {
+    fn decode(data: &[u8]) -> Result<Self, AcmeError>;
+}
+
+impl<T> Decode for T
+where
+    T: DeserializeOwned,
+{
+    fn decode(data: &[u8]) -> Result<Self, AcmeError> {
+        serde_json::from_slice(data).map_err(AcmeError::de)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Response<T> {
@@ -15,14 +32,16 @@ pub struct Response<T> {
 
 impl<T> Response<T>
 where
-    T: DeserializeOwned,
+    T: Decode,
 {
-    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, AcmeError> {
+    pub(crate) async fn from_decoded_response(
+        response: reqwest::Response,
+    ) -> Result<Self, AcmeError> {
         let url = response.url().clone().into();
         let status = response.status();
         let headers = response.headers().clone();
-        let body = response.text().await?;
-        let payload: T = serde_json::from_str(&body).map_err(AcmeError::de)?;
+        let body = response.bytes().await?;
+        let payload: T = T::decode(&body)?;
 
         Ok(Response {
             url,
@@ -31,7 +50,9 @@ where
             payload,
         })
     }
+}
 
+impl<T> Response<T> {
     pub fn status(&self) -> http::StatusCode {
         self.status
     }
@@ -79,7 +100,7 @@ where
 
 impl<T> fmt::AcmeFormat for Response<T>
 where
-    T: Serialize,
+    T: Encode,
 {
     fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
         writeln!(
@@ -94,6 +115,6 @@ where
 
         writeln!(f)?;
 
-        f.write_json(&self.payload)
+        write!(f, "{}", self.payload.encode().unwrap())
     }
 }

@@ -7,18 +7,34 @@ pub use self::acme::{AcmeErrorCode, AcmeErrorDocument};
 pub enum AcmeError {
     #[error("An error occured with the ACME service: {0}")]
     Acme(#[source] self::acme::AcmeErrorDocument),
+
     #[error("An error occured during the network request: {0}")]
     HttpRequest(#[from] reqwest::Error),
+
     #[error("An error occured deserializing JSON: {0}")]
     JsonDeserialize(#[source] serde_json::Error),
+
     #[error("An error occured serializing JSON: {0}")]
     JsonSerialize(#[source] serde_json::Error),
+
+    #[error("An error occured while deserializing a PEM binary: {0}")]
+    PemDecodeError(#[from] pem_rfc7468::Error),
+
+    #[error("An error occured while deserializing a DER binary: {0}")]
+    DerDecodeError(#[from] der::Error),
+
+    #[error("The ACME Client encountered non utf-8 data: {0}")]
+    Utf8Error(#[from] std::str::Utf8Error),
+
     #[error("The nonce header returned was not valid: {0:?}")]
     InvalidNonce(Option<HeaderValue>),
+
     #[error("No Nonce header was returned with the request")]
     MissingNonce,
+
     #[error("An error occured during a network request to fetch a new nonce: {0}")]
     NonceRequest(#[source] reqwest::Error),
+
     #[error("An error occured while signing the JWS token: {0}")]
     Signing(#[source] eyre::Report),
 }

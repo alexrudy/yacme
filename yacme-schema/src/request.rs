@@ -13,6 +13,19 @@ use yacme_protocol::{
 
 const CONTENT_JOSE: &str = "application/jose+json";
 
+pub trait Encode {
+    fn encode(&self) -> Result<String, AcmeError>;
+}
+
+impl<T> Encode for T
+where
+    T: Serialize,
+{
+    fn encode(&self) -> Result<String, AcmeError> {
+        serde_json::to_string_pretty(&self).map_err(AcmeError::ser)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Method<T> {
     Get,

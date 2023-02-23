@@ -11,14 +11,14 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use reqwest::Certificate;
+use der::EncodePem;
 use reqwest::Url;
 use serde::Serialize;
 use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_schema::authorizations::Authorization;
 use yacme_schema::challenges::{Challenge, ChallengeReadyRequest};
 use yacme_schema::directory::Directory;
-use yacme_schema::orders::{FinalizeOrder, OrderStatus};
+use yacme_schema::orders::{CertificateChain, FinalizeOrder, OrderStatus};
 use yacme_schema::{Account, Order};
 use yacme_schema::{Client, Request, Response};
 
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     println!("Loading root certificate from {PEBBLE_ROOT_CA}");
-    let cert = Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
+    let cert = reqwest::Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
     let client = reqwest::Client::builder()
         .add_root_certificate(cert.clone())
         .timeout(std::time::Duration::from_secs(30))
@@ -237,9 +237,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::debug!("Order status: {:?}", order.payload().status());
     }
 
-    // let cert = client
-    //     .download_certificate(account.payload(), order.payload())
-    //     .await?;
+    if let Some(certificate) = order.payload().certificate() {
+        tracing::info!("Fetching certificate");
+        let _cert = client
+            .execute::<_, CertificateChain>(Request::get(certificate.clone(), account_key.clone()))
+            .await?;
+
+        tracing::info!("Save certificate chain here");
+    } else {
+        tracing::warn!("Certificate was never finalized");
+    }
 
     Ok(())
 }

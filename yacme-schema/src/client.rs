@@ -2,13 +2,18 @@ use http::HeaderMap;
 use reqwest::Certificate;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{Request, Response};
 use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use yacme_protocol::jose::Nonce;
 use yacme_protocol::Url;
 
+use crate::response::{Decode, Response};
+use crate::Request;
+
 #[cfg(feature = "debug-messages")]
 use yacme_protocol::fmt::AcmeFormat;
+
+#[cfg(feature = "debug-messages")]
+use crate::request::Encode;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
 
@@ -79,49 +84,48 @@ impl Client {
         R: DeserializeOwned,
     {
         let response = self.inner.get(url.as_str()).send().await?;
-        Response::from_response(response).await
+        Response::from_decoded_response(response).await
     }
 
     #[cfg(not(feature = "debug-messages"))]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
-        R: DeserializeOwned,
+        R: Decode,
     {
-        self.execute_internal(request).await
+        Response::from_decoded_response(self.execute_internal(request).await?).await
     }
 
     #[cfg(feature = "debug-messages")]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
-        R: DeserializeOwned + Serialize,
+        R: Decode + Encode,
     {
-        self.execute_internal(request).await.map(|r| {
-            eprintln!("{}", r.formatted());
-            r
-        })
+        eprintln!("{}", request.as_signed().formatted());
+        Response::from_decoded_response(self.execute_internal(request).await?)
+            .await
+            .map(|r| {
+                eprintln!("{}", r.formatted());
+                r
+            })
     }
 
-    async fn execute_internal<P, R>(
+    #[inline]
+    async fn execute_internal<P>(
         &mut self,
         request: Request<P>,
-    ) -> Result<Response<R>, AcmeError>
+    ) -> Result<reqwest::Response, AcmeError>
     where
         P: Serialize,
-        R: DeserializeOwned,
     {
         let mut nonce = self.get_nonce().await?;
         loop {
-            #[cfg(feature = "debug-messages")]
-            {
-                eprintln!("{}", request.as_signed().formatted());
-            }
             let signed = request.sign(nonce)?;
             let response = self.inner.execute(signed.into_inner()).await?;
             self.record_nonce(response.headers())?;
             if response.status().is_success() {
-                return Response::from_response(response).await;
+                return Ok(response);
             } else {
                 let body = response.bytes().await?;
                 let error: AcmeErrorDocument =
