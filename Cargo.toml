@@ -35,6 +35,7 @@ tracing-subscriber.version = "^0.3"
 x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
 digest = { version = "^0.10.6" }
 ouroboros = { version = "^0.15.6" }
+mime = "0.3.16"
 
 yacme-key = { path = "yacme-key/" }
 yacme-protocol = { path = "yacme-protocol/" }

@@ -14,12 +14,12 @@ use std::sync::Arc;
 use reqwest::Url;
 use serde::Serialize;
 use yacme_protocol::jose::AccountKeyIdentifier;
+use yacme_protocol::{Client, Request, Response};
 use yacme_schema::authorizations::Authorization;
 use yacme_schema::challenges::{Challenge, ChallengeReadyRequest};
 use yacme_schema::directory::Directory;
 use yacme_schema::orders::{CertificateChain, FinalizeOrder, OrderStatus};
 use yacme_schema::{Account, Order};
-use yacme_schema::{Client, Request, Response};
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 

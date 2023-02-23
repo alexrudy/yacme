@@ -1,17 +1,11 @@
 pub mod account;
 pub mod authorizations;
 pub mod challenges;
-pub mod client;
 pub mod directory;
 pub mod identifier;
 pub mod orders;
-mod request;
-mod response;
 
-pub use crate::request::{Key, Method, Request, SignedRequest};
-pub use crate::response::Response;
 pub use account::Account;
-pub use client::Client;
 pub use identifier::Identifier;
 pub use orders::Order;
 

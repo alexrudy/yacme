@@ -19,3 +19,4 @@ yacme-key.workspace = true
 signature.workspace = true
 pem-rfc7468.workspace = true
 der.workspace = true
+mime.workspace = true

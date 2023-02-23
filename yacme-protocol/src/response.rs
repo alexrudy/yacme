@@ -2,10 +2,10 @@ use std::fmt::Write;
 
 use serde::de::DeserializeOwned;
 
-use yacme_protocol::fmt::{self, HttpCase};
-use yacme_protocol::{AcmeError, Url};
-
+use crate::fmt::{self, HttpCase};
 use crate::request::Encode;
+use crate::AcmeError;
+use crate::Url;
 
 pub trait Decode: Sized {
     fn decode(data: &[u8]) -> Result<Self, AcmeError>;

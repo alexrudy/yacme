@@ -5,8 +5,9 @@ use std::sync::Arc;
 use reqwest::Certificate;
 use reqwest::Url;
 use yacme_protocol::fmt::AcmeFormat;
+use yacme_protocol::{Client, Request};
 use yacme_schema::directory::Directory;
-use yacme_schema::{Account, Client, Request};
+use yacme_schema::Account;
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 

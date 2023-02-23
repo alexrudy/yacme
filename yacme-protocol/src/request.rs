@@ -3,13 +3,11 @@ use std::{ops::Deref, sync::Arc};
 
 use serde::Serialize;
 use yacme_key::{Signature, SigningKey};
-use yacme_protocol::fmt::HttpCase;
-use yacme_protocol::jose::SignedToken;
-use yacme_protocol::{
-    fmt,
-    jose::{AccountKeyIdentifier, Nonce, ProtectedHeader, UnsignedToken},
-    AcmeError, Url,
-};
+
+use crate::fmt::{self, HttpCase};
+use crate::jose::{AccountKeyIdentifier, Nonce, ProtectedHeader, SignedToken, UnsignedToken};
+use crate::AcmeError;
+use crate::Url;
 
 const CONTENT_JOSE: &str = "application/jose+json";
 

@@ -8,11 +8,11 @@ use yacme_key::cert::SignedCertificateRequest;
 use yacme_key::SigningKey;
 use yacme_protocol::Base64Data;
 
-use crate::client::Client;
 use crate::identifier::Identifier;
-use crate::Request;
 use yacme_protocol::errors::AcmeError;
 use yacme_protocol::errors::AcmeErrorDocument;
+use yacme_protocol::Client;
+use yacme_protocol::Request;
 use yacme_protocol::Url;
 
 const PEM_DOCUMENT_BEGIN: &str = "-----BEGIN";
@@ -215,7 +215,7 @@ impl CertificateChain {
     }
 }
 
-impl crate::response::Decode for CertificateChain {
+impl yacme_protocol::response::Decode for CertificateChain {
     fn decode(data: &[u8]) -> Result<Self, AcmeError> {
         let documents = std::str::from_utf8(data)?;
 
@@ -253,7 +253,7 @@ impl pem_rfc7468::PemLabel for CertificateChain {
     const PEM_LABEL: &'static str = x509_cert::Certificate::PEM_LABEL;
 }
 
-impl crate::request::Encode for CertificateChain {
+impl yacme_protocol::request::Encode for CertificateChain {
     fn encode(&self) -> Result<String, AcmeError> {
         Ok(self.to_pem_documents()?.join(""))
     }

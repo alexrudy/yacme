@@ -2,12 +2,11 @@ use http::HeaderMap;
 use reqwest::Certificate;
 use serde::{de::DeserializeOwned, Serialize};
 
-use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
-use yacme_protocol::jose::Nonce;
-use yacme_protocol::Url;
-
+use crate::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
+use crate::jose::Nonce;
 use crate::response::{Decode, Response};
 use crate::Request;
+use crate::Url;
 
 #[cfg(feature = "debug-messages")]
 use yacme_protocol::fmt::AcmeFormat;
@@ -180,10 +179,6 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
-
-    use serde_json::Value;
-    use yacme_protocol::jose::{ProtectedHeader, UnsignedToken};
 
     use super::*;
 
@@ -192,43 +187,5 @@ mod tests {
         let response = crate::response!("new-nonce.http");
         let nonce = extract_nonce(response.headers()).unwrap();
         assert_eq!(nonce.as_ref(), "oFvnlFP1wIhRlYS2jTaXbA");
-    }
-
-    #[test]
-    fn new_account_request() {
-        let nonce = "6S8IqOGY7eL2lsGoTZYifg";
-        let key = crate::key!("ec-p255");
-        let builder = crate::account::AccountBuilder::new()
-            .add_contact_email("cert-admin@example.org")
-            .unwrap()
-            .add_contact_email("admin@example.org")
-            .unwrap()
-            .agree_to_terms_of_service();
-
-        let header = ProtectedHeader::new_acme_header(
-            &key,
-            "https://example.com/acme/new-account".parse().unwrap(),
-            Nonce::from(nonce.to_owned()),
-        );
-        let public = key.public_key();
-        let payload = builder.build_payload(
-            &public,
-            "https://example.com/acme/new-account".parse().unwrap(),
-        );
-
-        let token = UnsignedToken::post(header, &payload);
-        let signed_token = token.sign(key.deref()).unwrap();
-
-        let serialized = serde_json::to_value(signed_token).unwrap();
-        let expected = serde_json::from_str::<Value>(crate::example!("new-account.json")).unwrap();
-
-        assert_eq!(
-            serialized["payload"], expected["payload"],
-            "payload mismatch"
-        );
-        assert_eq!(
-            serialized["protected"], expected["protected"],
-            "header mismatch"
-        );
     }
 }
