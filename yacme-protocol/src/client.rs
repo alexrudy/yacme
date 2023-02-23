@@ -1,3 +1,4 @@
+//! Client for sending HTTP requests to an ACME server
 use http::HeaderMap;
 use reqwest::Certificate;
 use serde::{de::DeserializeOwned, Serialize};
@@ -16,6 +17,7 @@ use crate::request::Encode;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
 
+/// Builder struct for an ACME HTTP client.
 pub struct ClientBuilder {
     inner: reqwest::ClientBuilder,
     new_nonce: Option<Url>,
@@ -29,8 +31,11 @@ impl Default for ClientBuilder {
 
 impl ClientBuilder {
     pub fn new() -> Self {
+        let builder =
+            reqwest::Client::builder().user_agent(concat!("YACME / ", env!("CARGO_PKG_VERSION")));
+
         ClientBuilder {
-            inner: reqwest::Client::builder(),
+            inner: builder,
             new_nonce: None,
         }
     }
@@ -64,6 +69,11 @@ impl ClientBuilder {
     }
 }
 
+/// ACME HTTP Client
+///
+/// The client handles sending ACME HTTP requests, and providing ACME HTTP
+/// responses using the [`crate::Request`] and [`crate::Response`] objects
+/// respectively.
 #[derive(Debug)]
 pub struct Client {
     pub(super) inner: reqwest::Client,
@@ -72,12 +82,15 @@ pub struct Client {
 }
 
 impl Client {
+    /// Create a new client builder to configure a client.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
     }
 }
 
 impl Client {
+    /// Run a plain HTTP `GET` request without using the ACME HTTP JWS
+    /// protocol.
     pub async fn get<R>(&mut self, url: Url) -> Result<Response<R>, AcmeError>
     where
         R: DeserializeOwned,
@@ -86,6 +99,7 @@ impl Client {
         Response::from_decoded_response(response).await
     }
 
+    /// Execute an HTTP request using the ACME protocol.
     #[cfg(not(feature = "debug-messages"))]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
     where
@@ -141,7 +155,7 @@ impl Client {
     }
 }
 
-fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {
+pub(crate) fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {
     let value = headers.get(NONCE_HEADER).ok_or(AcmeError::MissingNonce)?;
     Ok(Nonce::from(
         value

@@ -3,8 +3,7 @@ use yacme_protocol::Url;
 
 /// Directories are the single source required to configure an ACME client
 /// for use with a specific provider. They can be fetched as JSON from an
-/// advertised directory Url. See [super::Client::new_from_directory_url]
-/// for information on constructing a directory from a client Url
+/// advertised directory URL.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Directory {

@@ -8,6 +8,8 @@ pub use fmt::Result;
 pub use fmt::Write;
 use serde::Serialize;
 
+/// A [`fmt::Write`] writer with indentation memory useful for formatting
+/// structured data.
 pub struct IndentWriter<'i, W> {
     writer: W,
     indent: &'i str,
@@ -39,6 +41,12 @@ where
 }
 
 impl<'i, W> IndentWriter<'i, W> {
+    /// Create a new writer from an existing writer and a proposed indent
+    /// string.
+    ///
+    /// The writer will start with no indent. Use [`IndentWriter::indent`]
+    /// to create an indented writer at the next level. Drop the writer returned
+    /// from [`IndentWriter::indent`] to return the current level.
     pub fn new(indent: &'i str, writer: W) -> Self {
         IndentWriter {
             writer,
@@ -54,6 +62,7 @@ impl<'i, W> IndentWriter<'i, W> {
 }
 
 impl<'i, W: fmt::Write> IndentWriter<'i, W> {
+    /// Produce a new [`IndentWriter`] at one deeper indent level.
     pub fn indent(&mut self) -> IndentWriter<'i, &mut IndentWriter<'i, W>> {
         let indent = self.indent;
         let level = self.level + 1;
@@ -65,6 +74,11 @@ impl<'i, W: fmt::Write> IndentWriter<'i, W> {
         }
     }
 
+    /// Produce a new [`IndentWriter`] at one deeper indent level, but don't indent
+    /// the current line.
+    ///
+    /// This produces a "hanging indent" where only the second line starts at the new
+    /// indentation.
     pub fn indent_skip_first(&mut self) -> IndentWriter<'i, &mut IndentWriter<'i, W>> {
         let indent = self.indent;
         let level = self.level + 1;
@@ -76,6 +90,10 @@ impl<'i, W: fmt::Write> IndentWriter<'i, W> {
         }
     }
 
+    /// Write an object as prettified JSON
+    ///
+    /// This will use the specified indent string to pretty-format the JSON via
+    /// [`serde_json::to_string_pretty`].
     pub fn write_json<T: Serialize>(&mut self, data: &T) -> fmt::Result {
         let mut writer = Vec::with_capacity(128);
         let fmt = serde_json::ser::PrettyFormatter::with_indent(self.indent_str().as_bytes());
@@ -147,9 +165,14 @@ where
     }
 }
 
-pub type Formatter<'f> = IndentWriter<'f, &'f mut std::fmt::Formatter<'f>>;
-
+/// Format trait for showing data in the style of [RFC 8885][]
+///
+/// Data should be formatted as an HTTP request with a pretty-printed
+/// JSON body, using `base64encode()` to represent base-64 encoded strings.
+///
+/// [RFC 8885]: https://datatracker.ietf.org/doc/html/rfc8555
 pub trait AcmeFormat {
+    /// Write this format at the current indentation.
     fn fmt<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result;
 
     fn fmt_indented<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result {
@@ -167,6 +190,7 @@ pub trait AcmeFormat {
     }
 }
 
+/// Formatting proxy to cause [`fmt::Display`] to print in the [`AcmeFormat`] style.
 pub struct AcmeFormatted<'a, T: AcmeFormat + ?Sized>(&'a T);
 
 impl<'a, T> fmt::Display for AcmeFormatted<'a, T>
@@ -179,10 +203,23 @@ where
     }
 }
 
+/// Trait for case-folding items which implement [`fmt::Display`] according
+/// to HTTP/1.1 casefolding rules.
 pub trait HttpCase {
+    /// Format in HTTP/1.1 header title case.
+    ///
+    /// Provides a formatting proxy for formatting according to HTTP/1.1
+    /// title case, where header values are formatted in title case using `-`
+    /// as the word separator.
     fn titlecase(&self) -> TitleCase<'_, Self> {
         TitleCase(self)
     }
+
+    /// Format in HTTP/1.1 header lower case.
+    ///
+    /// Provides a formatting proxy for formatting according to HTTP/1.1
+    /// lower case, where header values are all ascii lowercase. This is
+    /// also consistent with HTTP/2 and HTTP/3.
     fn lowercase(&self) -> LowerCase<'_, Self> {
         LowerCase(self)
     }
@@ -190,15 +227,17 @@ pub trait HttpCase {
 
 impl<T> HttpCase for T where T: fmt::Display {}
 
+/// Writer implementation which always writes in HTTP/1.1 header
+/// title case, using `-` as word delimiters.
 #[derive(Debug)]
 struct TitleCaseWriter<W> {
     writer: W,
     prev: char,
 }
 
-impl<W> std::fmt::Write for TitleCaseWriter<W>
+impl<W> fmt::Write for TitleCaseWriter<W>
 where
-    W: std::fmt::Write,
+    W: fmt::Write,
 {
     fn write_str(&mut self, s: &str) -> Result {
         for c in s.chars() {
@@ -207,7 +246,12 @@ where
             } else {
                 self.writer.write_char(c.to_ascii_lowercase())?;
             }
-            self.prev = c;
+
+            if c.is_ascii_whitespace() {
+                self.prev = '-'
+            } else {
+                self.prev = c;
+            }
         }
         Ok(())
     }
@@ -219,23 +263,29 @@ impl<W> TitleCaseWriter<W> {
     }
 }
 
+/// Format in HTTP/1.1 header title case.
+///
+/// A formatting proxy for formatting according to HTTP/1.1
+/// title case, where header values are formatted in title case using `-`
+/// as the word separator.
 pub struct TitleCase<'a, T: ?Sized>(&'a T);
 
-impl<'a, T: std::fmt::Display + ?Sized> std::fmt::Display for TitleCase<'a, T> {
+impl<'a, T: fmt::Display + ?Sized> fmt::Display for TitleCase<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result {
         let mut writer = TitleCaseWriter::new(f);
         write!(&mut writer, "{}", self.0)
     }
 }
 
+/// Writer implementation which always writes in ascii lowercase.
 #[derive(Debug)]
 struct LowerCaseWriter<W> {
     writer: W,
 }
 
-impl<W> std::fmt::Write for LowerCaseWriter<W>
+impl<W> fmt::Write for LowerCaseWriter<W>
 where
-    W: std::fmt::Write,
+    W: fmt::Write,
 {
     fn write_str(&mut self, s: &str) -> Result {
         self.writer.write_str(&s.to_ascii_lowercase())
@@ -248,9 +298,14 @@ impl<W> LowerCaseWriter<W> {
     }
 }
 
+/// Format in HTTP/1.1 header lower case.
+///
+/// A formatting proxy for formatting according to HTTP/1.1
+/// lower case, where header values are all ascii lowercase. This is
+/// also consistent with HTTP/2 and HTTP/3.
 pub struct LowerCase<'a, T: ?Sized>(&'a T);
 
-impl<'a, T: std::fmt::Display + ?Sized> std::fmt::Display for LowerCase<'a, T> {
+impl<'a, T: fmt::Display + ?Sized> fmt::Display for LowerCase<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result {
         let mut writer = LowerCaseWriter::new(f);
         write!(&mut writer, "{}", self.0)

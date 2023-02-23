@@ -1,0 +1,11 @@
+{
+  "alg": "ES256",
+  "jwk": {
+    "crv": "P-256",
+    "kty": "EC",
+    "x": "hlhwTNi4-7lAOIvf4ykg6db8OPosrocVRwRC14cWg_w",
+    "y": "s5Aq1AA6G6aLW4JODyYxOsWtQzVU60XxHT6uOsHdRd0"
+  },
+  "nonce": "<nonce>",
+  "url": "https://letsencrypt.test/new-orderz"
+}

@@ -6,6 +6,8 @@ use serde::{de, ser, Serialize};
 
 use crate::fmt::{self, IndentWriter};
 
+/// Wrapper type to indicate that the inner type should be serialized
+/// as bytes with a Base64 URL-safe encoding.
 #[derive(Debug, Clone)]
 pub struct Base64Data<T>(pub T);
 
@@ -41,6 +43,8 @@ where
     }
 }
 
+/// Wrapper type to indicate that the inner type should be serialized
+/// as JSON and then Base64 URL-safe encoded and serialized as a string.
 #[derive(Debug, Clone)]
 pub struct Base64JSON<T>(pub T);
 

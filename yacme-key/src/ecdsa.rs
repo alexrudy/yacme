@@ -1,13 +1,14 @@
+//! Yacme's cryptographic primatives for ECDSA signatures
+
 use const_oid::AssociatedOid;
-// use digest::Digest;
 use elliptic_curve::sec1::ToEncodedPoint;
-// use elliptic_curve::ALGORITHM_OID;
-// use pkcs8::AssociatedOid;
 
 use crate::{PublicKeyAlgorithm, Signature};
 
+/// Named elliptic curves supported by Yacme
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EcdsaAlgorithm {
+    /// The NIST P-256 (a.k.a. secp256r1, prime256v1) elliptic curve.
     P256,
 }
 

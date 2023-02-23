@@ -17,6 +17,7 @@ use crate::ecdsa::EcdsaSigningKey;
 pub use crate::ecdsa::EcdsaAlgorithm;
 
 /// A signature, produced by signing a key over a message.
+///
 /// Interally, just bytes which must be encoded in some fashion
 /// for use.
 pub struct Signature(Vec<u8>);

@@ -1,3 +1,6 @@
+//! JSON Object Signing and Encryption primitives used in RFC 8885
+//! to implement the ACME protocol.
+
 use std::fmt::{Debug, Write};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -12,9 +15,12 @@ use crate::Url;
 
 use yacme_key::Signature;
 
+/// Sigature algorithms for JWS signatures.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SignatureAlgorithm {
+    /// Elliptic curve ECDSA signature with the NIST P-256 curve.
     ES256,
+    /// HMAC-SHA256 using a shared key
     HS256,
 }
 
@@ -27,6 +33,15 @@ impl std::fmt::Display for SignatureAlgorithm {
     }
 }
 
+/// Anti-replay nonce
+///
+/// This is a token provided by the ACME server. Each nonce may only be used
+/// once, and each reply from the ACME server should contain a new nonce.
+///
+/// A new nonce is also avaiable from the ACME endpoint `new-nonce`.
+///
+/// The [`Nonce`] here is really just an opaque stirng token. Clients
+/// may not assume anything about the structure of the nonce.
 #[derive(Debug, Clone, Serialize)]
 pub struct Nonce(String);
 
@@ -42,6 +57,10 @@ impl From<String> for Nonce {
     }
 }
 
+/// Identifier used by ACME servers for registered accounts
+///
+/// Internally, RFC 8885 specifies that this should be the `GET` resource URL
+/// for the account.
 #[derive(Debug, Clone)]
 pub struct AccountKeyIdentifier(Arc<Url>);
 
@@ -72,6 +91,16 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
     }
 }
 
+/// The signed header values for the JWS which are common to each
+/// request.
+///
+/// RFC 8885 only supports "Protected" / "Registered" headers, and only a
+/// subset of those fields.
+///
+/// Fields which are `None` are left out of the protected header.
+///
+/// The parameter `KI` is the key identifier, which must be serializable as
+/// JSON, but is otherwise unconstrained.
 #[derive(Debug, Clone, Serialize)]
 #[serde(bound(serialize = "KI: Serialize"))]
 pub struct ProtectedHeader<KI> {
@@ -114,6 +143,7 @@ where
 }
 
 impl<KI> ProtectedHeader<KI> {
+    /// Create a new protected header from the constituent components.
     pub fn new(
         algorithm: SignatureAlgorithm,
         key_id: Option<KI>,
@@ -130,14 +160,18 @@ impl<KI> ProtectedHeader<KI> {
         }
     }
 
+    /// Replace the [`Nonce`] in this header with a new value.
     pub fn replace_nonce(&mut self, nonce: Nonce) {
         self.nonce = Some(nonce);
     }
 }
 
+/// A protected header which uses [`AccountKeyIdentifier`] as the key identifier.
 pub type AcmeProtectedHeader<'k> = ProtectedHeader<&'k AccountKeyIdentifier>;
 
 impl<'k> ProtectedHeader<&'k AccountKeyIdentifier> {
+    /// Create a new protected header based on a signing key without an account
+    /// identifier.
     pub fn new_acme_header(
         key: &'k yacme_key::SigningKey,
         url: Url,
@@ -152,6 +186,7 @@ impl<'k> ProtectedHeader<&'k AccountKeyIdentifier> {
         }
     }
 
+    /// Create a new protected header based on an account identifier.
     pub fn new_acme_account_header(
         account: &'k AccountKeyIdentifier,
         url: Url,
@@ -218,48 +253,20 @@ where
     }
 }
 
+/// A JWS token wihtout an attached signature
+///
+/// This token contains just the unsigned parts which are used as the
+/// input to the cryptographic signature.
 #[derive(Debug, Serialize)]
-#[serde(bound(serialize = "P: Serialize, KI: Serialize, S: AsRef<[u8]>"))]
-pub struct SignedToken<P, KI, S> {
-    protected: Base64JSON<ProtectedHeader<KI>>,
-    payload: Payload<P>,
-    signature: Base64Data<S>,
-}
-
-impl<P, KI, S> fmt::AcmeFormat for SignedToken<P, KI, S>
-where
-    P: Serialize,
-    KI: Debug + Serialize,
-    S: AsRef<[u8]>,
-{
-    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
-        fmt_token(f, &self.protected, &self.payload, Some(&self.signature))
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum SigningError {
-    #[error("signature error")]
-    Signing(#[from] signature::Error),
-    #[error("serialization error: {0}")]
-    JsonSerialize(#[source] serde_json::Error),
-}
-
-impl From<SigningError> for AcmeError {
-    fn from(value: SigningError) -> Self {
-        match value {
-            SigningError::Signing(error) => Self::Signing(eyre::Report::msg(error)),
-            SigningError::JsonSerialize(error) => Self::ser(error),
-        }
-    }
-}
-
 pub struct UnsignedToken<P, KI> {
     protected: Base64JSON<ProtectedHeader<KI>>,
     payload: Payload<P>,
 }
 
 impl<P, KI> UnsignedToken<P, KI> {
+    /// Create a JWS token appropraite for an ACME `GET` request.
+    ///
+    /// The request will have an empty string as the payload.
     pub fn get(protected: ProtectedHeader<KI>) -> Self {
         Self {
             protected: protected.into(),
@@ -269,6 +276,7 @@ impl<P, KI> UnsignedToken<P, KI> {
 }
 
 impl<P, KI> UnsignedToken<P, KI> {
+    /// Create a JWS token appropraite for an ACME `POST` request.
     pub fn post(protected: ProtectedHeader<KI>, payload: P) -> Self {
         Self {
             protected: protected.into(),
@@ -295,6 +303,7 @@ where
         Ok(message)
     }
 
+    /// Sign this token with the given cryptographic key.
     pub fn sign<K>(self, key: &K) -> Result<SignedToken<P, KI, Signature>, SigningError>
     where
         K: signature::Signer<Signature>,
@@ -302,12 +311,13 @@ where
         let message = self.signing_input()?;
         let signature = key.try_sign(message.as_bytes())?;
         Ok(SignedToken {
-            protected: self.protected,
-            payload: self.payload,
+            target: self,
             signature: signature.into(),
         })
     }
 
+    /// Sign this token using the given HMAC digest
+    /// function.
     pub fn digest<D: signature::digest::Mac>(
         self,
         mut digest: D,
@@ -316,8 +326,7 @@ where
         digest.update(message.as_bytes());
         let result = digest.finalize();
         Ok(SignedToken {
-            protected: self.protected,
-            payload: self.payload,
+            target: self,
             signature: Signature::from(result.into_bytes().to_vec()).into(),
         })
     }
@@ -330,6 +339,49 @@ where
 {
     fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
         fmt_token::<_, _, [u8; 0], _>(f, &self.protected, &self.payload, None)
+    }
+}
+
+/// A JWS token with an included cryptographic signature.
+#[derive(Debug, Serialize)]
+#[serde(bound(serialize = "UnsignedToken<P, KI>: Serialize, S: AsRef<[u8]>"))]
+pub struct SignedToken<P, KI, S> {
+    #[serde(flatten)]
+    target: UnsignedToken<P, KI>,
+    signature: Base64Data<S>,
+}
+
+impl<P, KI, S> fmt::AcmeFormat for SignedToken<P, KI, S>
+where
+    P: Serialize,
+    KI: Debug + Serialize,
+    S: AsRef<[u8]>,
+{
+    fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
+        fmt_token(
+            f,
+            &self.target.protected,
+            &self.target.payload,
+            Some(&self.signature),
+        )
+    }
+}
+
+/// Error returned for issues signing a JWS token
+#[derive(Debug, Error)]
+pub enum SigningError {
+    #[error("signature error")]
+    Signing(#[from] signature::Error),
+    #[error("serialization error: {0}")]
+    JsonSerialize(#[source] serde_json::Error),
+}
+
+impl From<SigningError> for AcmeError {
+    fn from(value: SigningError) -> Self {
+        match value {
+            SigningError::Signing(error) => Self::Signing(eyre::Report::msg(error)),
+            SigningError::JsonSerialize(error) => Self::ser(error),
+        }
     }
 }
 

@@ -1,8 +1,11 @@
+//! Errors which occur when working with an ACME Protocol
+
 use http::HeaderValue;
 use thiserror::Error;
 
 pub use self::acme::{AcmeErrorCode, AcmeErrorDocument};
 
+/// Unified error type for errors arising from the ACME protocol.
 #[derive(Debug, Error)]
 pub enum AcmeError {
     #[error("An error occured with the ACME service: {0}")]
@@ -68,6 +71,10 @@ mod acme {
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
+    /// Error document returned by ACME servers when a request has caused an
+    /// error.
+    ///
+    /// ACME Error documents follow RFC 7807 "Problem Details for HTTP APIs".
     #[derive(Debug, Clone, Error, Serialize, Deserialize)]
     #[serde(from = "RawErrorInfo")]
     #[error("{code}: {detail}")]
@@ -86,6 +93,12 @@ mod acme {
         }
     }
 
+    /// Specific code indicating the kind of error that an ACME server
+    /// encountered.
+    ///
+    /// These codes are specified in RFC 8885.
+    ///
+    /// Not all codes are implemented here.
     #[derive(Debug, Serialize, Clone)]
     pub enum AcmeErrorCode {
         BadNonce,

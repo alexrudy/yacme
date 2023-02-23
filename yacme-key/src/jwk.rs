@@ -1,3 +1,4 @@
+//! Yacme's primatives for JSON Web Keys and thumbprints
 use std::fmt;
 
 use base64ct::Encoding;
@@ -28,6 +29,11 @@ impl fmt::Debug for Jwk {
 }
 
 impl Jwk {
+    /// An RFC 7638 thumbprint, which uniquely identifies this JWS cryptographic
+    /// key.
+    ///
+    /// The thumbprint hash value can be used for identifying or selecting the key
+    /// represented by the JWK that is the subject of the thumbprint.
     pub fn thumbprint(&self) -> String {
         let thumb = serde_json::to_vec(&self).expect("Valid JSON format");
         // eprintln!("JWK: {}", std::str::from_utf8(&thumb).unwrap());

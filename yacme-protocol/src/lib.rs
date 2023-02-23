@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::str::FromStr;
 
 mod base64;
@@ -16,6 +17,9 @@ pub use request::Request;
 pub use response::Response;
 use serde::{Deserialize, Serialize};
 
+/// Universal Resource Locator which provides
+/// a [`std::fmt::Debug`] implementation which prints the
+/// full URL (rather than the parsed parts) for compactness.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Url(url::Url);
 
@@ -30,6 +34,13 @@ impl Url {
 
     pub fn host(&self) -> Option<&str> {
         self.0.host_str()
+    }
+}
+
+impl Deref for Url {
+    type Target = url::Url;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
