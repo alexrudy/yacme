@@ -2,7 +2,7 @@ use http::HeaderMap;
 use reqwest::Certificate;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{request, Request, Response};
+use crate::{Request, Response};
 use yacme_protocol::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use yacme_protocol::jose::Nonce;
 use yacme_protocol::Url;
