@@ -17,10 +17,12 @@ pub use request::Request;
 pub use response::Response;
 use serde::{Deserialize, Serialize};
 
+pub type Result<T> = ::std::result::Result<T, AcmeError>;
+
 /// Universal Resource Locator which provides
 /// a [`std::fmt::Debug`] implementation which prints the
 /// full URL (rather than the parsed parts) for compactness.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Url(url::Url);
 
 impl Url {
@@ -71,7 +73,7 @@ impl std::fmt::Debug for Url {
 impl FromStr for Url {
     type Err = url::ParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
         s.parse().map(Url)
     }
 }

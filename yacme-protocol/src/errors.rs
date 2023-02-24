@@ -40,6 +40,12 @@ pub enum AcmeError {
 
     #[error("An error occured while signing the JWS token: {0}")]
     Signing(#[source] eyre::Report),
+
+    #[error("Required configuration data is missing: {0}")]
+    MissingData(&'static str),
+
+    #[error("Signing Key is missing")]
+    MissingKey,
 }
 
 impl AcmeError {

@@ -1,7 +1,7 @@
 //! Client for sending HTTP requests to an ACME server
 use http::HeaderMap;
 use reqwest::Certificate;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 
 use crate::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use crate::jose::Nonce;
@@ -18,6 +18,7 @@ use crate::request::Encode;
 const NONCE_HEADER: &str = "Replay-Nonce";
 
 /// Builder struct for an ACME HTTP client.
+#[derive(Debug)]
 pub struct ClientBuilder {
     inner: reqwest::ClientBuilder,
     new_nonce: Option<Url>,
@@ -64,7 +65,7 @@ impl ClientBuilder {
         Ok(Client {
             inner: self.inner.build()?,
             nonce: None,
-            new_nonce: self.new_nonce.unwrap(),
+            new_nonce: self.new_nonce,
         })
     }
 }
@@ -74,17 +75,21 @@ impl ClientBuilder {
 /// The client handles sending ACME HTTP requests, and providing ACME HTTP
 /// responses using the [`crate::Request`] and [`crate::Response`] objects
 /// respectively.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Client {
     pub(super) inner: reqwest::Client,
     nonce: Option<Nonce>,
-    new_nonce: Url,
+    new_nonce: Option<Url>,
 }
 
 impl Client {
     /// Create a new client builder to configure a client.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
+    }
+
+    pub fn set_new_nonce_url(&mut self, url: Url) {
+        self.new_nonce = Some(url);
     }
 }
 
@@ -93,7 +98,7 @@ impl Client {
     /// protocol.
     pub async fn get<R>(&mut self, url: Url) -> Result<Response<R>, AcmeError>
     where
-        R: DeserializeOwned,
+        R: Decode,
     {
         let response = self.inner.get(url.as_str()).send().await?;
         Response::from_decoded_response(response).await
@@ -176,18 +181,23 @@ impl Client {
             return Ok(value);
         }
 
-        tracing::debug!("Requesting a new nonce");
-        let response = self
-            .inner
-            .head(self.new_nonce.as_str())
-            .send()
-            .await
-            .map_err(AcmeError::nonce)?;
+        if let Some(url) = &self.new_nonce {
+            tracing::debug!("Requesting a new nonce");
+            let response = self
+                .inner
+                .head(url.as_str())
+                .send()
+                .await
+                .map_err(AcmeError::nonce)?;
 
-        response.error_for_status_ref().map_err(AcmeError::nonce)?;
+            response.error_for_status_ref().map_err(AcmeError::nonce)?;
 
-        let value = extract_nonce(response.headers())?;
-        Ok(value)
+            let value = extract_nonce(response.headers())?;
+            Ok(value)
+        } else {
+            tracing::warn!("No nonce URL provided, unable to fetch new nonce");
+            Err(AcmeError::MissingNonce)
+        }
     }
 }
 

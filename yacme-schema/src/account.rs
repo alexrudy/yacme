@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use signature::digest::KeyInit;
 
@@ -72,13 +74,44 @@ impl ExternalAccountBindingRequest {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Contacts(HashSet<Url>);
+
+impl Contacts {
+    pub fn add_contact_url(&mut self, url: Url) {
+        self.0.insert(url);
+    }
+
+    pub fn add_contact_email(&mut self, email: &str) -> Result<(), url::ParseError> {
+        let url: Url = format!("mailto:{email}").parse()?;
+        self.add_contact_url(url);
+        Ok(())
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    pub fn remove(&mut self, url: &Url) -> bool {
+        self.0.remove(url)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub status: AccountStatus,
     #[serde(default)]
-    pub contact: Vec<Url>,
-    #[serde(default)]
+    pub contact: Contacts,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terms_of_service_agreed: Option<bool>,
     pub orders: Url,
 }
@@ -97,11 +130,12 @@ pub enum AccountStatus {
     Revoked,
 }
 
+/// Request payload for creating a new account
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAccount {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    contact: Vec<Url>,
+    #[serde(skip_serializing_if = "Contacts::is_empty")]
+    contact: Contacts,
     #[serde(skip_serializing_if = "Option::is_none")]
     terms_of_service_agreed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,13 +144,33 @@ pub struct CreateAccount {
     external_account_binding: Option<ExternalAccountToken>,
 }
 
+/// Request payload for updating an existing account
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAccount {
+    #[serde(skip_serializing_if = "Contacts::is_empty")]
+    contact: Contacts,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_account_binding: Option<ExternalAccountToken>,
+}
+
+impl UpdateAccount {
+    pub fn new(contact: Contacts) -> Self {
+        Self {
+            contact,
+            external_account_binding: None,
+        }
+    }
+}
+
 #[cfg(test)]
 #[derive(Serialize)]
 pub(super) struct CreateAccountPayload(CreateAccount);
 
+/// Builder struct to create a new account
 #[derive(Debug, Default)]
 pub struct AccountBuilder {
-    contact: Vec<Url>,
+    contact: Contacts,
     terms_of_service_agreed: Option<bool>,
     only_return_existing: Option<bool>,
     external_account_binding: Option<ExternalAccountBindingRequest>,
@@ -125,20 +179,16 @@ pub struct AccountBuilder {
 impl AccountBuilder {
     pub fn new() -> Self {
         AccountBuilder {
-            contact: Vec::new(),
+            contact: Contacts::default(),
             terms_of_service_agreed: None,
             only_return_existing: None,
             external_account_binding: None,
         }
     }
 
-    pub fn external_account(self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
-        AccountBuilder {
-            contact: self.contact,
-            terms_of_service_agreed: self.terms_of_service_agreed,
-            only_return_existing: self.only_return_existing,
-            external_account_binding: Some(binding),
-        }
+    pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
+        self.external_account_binding = Some(binding);
+        self
     }
 
     pub fn agree_to_terms_of_service(mut self) -> Self {
@@ -147,7 +197,7 @@ impl AccountBuilder {
     }
 
     pub fn add_contact_url(mut self, url: Url) -> Self {
-        self.contact.push(url);
+        self.contact.add_contact_url(url);
         self
     }
 
@@ -156,9 +206,9 @@ impl AccountBuilder {
         self
     }
 
-    pub fn add_contact_email(self, email: &str) -> Result<Self, url::ParseError> {
-        let url: Url = format!("mailto:{email}").parse()?;
-        Ok(self.add_contact_url(url))
+    pub fn add_contact_email(mut self, email: &str) -> Result<Self, url::ParseError> {
+        self.contact.add_contact_email(email)?;
+        Ok(self)
     }
 
     pub fn build(self, public_key: &PublicKey, url: Url) -> CreateAccount {
@@ -175,15 +225,6 @@ impl AccountBuilder {
     #[cfg(test)]
     pub(super) fn build_payload(self, public_key: &PublicKey, url: Url) -> CreateAccountPayload {
         CreateAccountPayload(self.build(public_key, url))
-    }
-
-    pub fn update(self) -> CreateAccount {
-        CreateAccount {
-            contact: self.contact,
-            terms_of_service_agreed: None,
-            only_return_existing: None,
-            external_account_binding: None,
-        }
     }
 }
 
