@@ -6,6 +6,7 @@ use reqwest::Certificate;
 use reqwest::Url;
 use yacme_protocol::fmt::AcmeFormat;
 use yacme_protocol::{Client, Request};
+use yacme_schema::account::{Contacts, CreateAccount};
 use yacme_schema::directory::Directory;
 use yacme_schema::Account;
 
@@ -76,15 +77,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
-    let account_request = Request::post(
-        yacme_schema::Account::builder()
-            .add_contact_email("hello@example.test")
-            .unwrap()
-            .agree_to_terms_of_service()
-            .build(&key.public_key(), directory.new_account.clone()),
-        directory.new_account.clone(),
-        key.clone(),
-    );
+    let contact = {
+        let mut contact = Contacts::new();
+        contact.add_contact_email("hello@example.test")?;
+        contact
+    };
+
+    let payload = CreateAccount {
+        contact,
+        terms_of_service_agreed: Some(true),
+        ..Default::default()
+    };
+
+    let account_request = Request::post(payload, directory.new_account.clone(), key.clone());
     println!("{}", account_request.as_signed().formatted());
 
     let account = client.execute::<_, Account>(account_request).await?;

@@ -6,9 +6,12 @@ use arc_swap::ArcSwap;
 
 use yacme_key::SigningKey;
 use yacme_protocol::{AcmeError, Request, Response, Url};
-use yacme_schema::account::{Contacts, ExternalAccountBindingRequest};
+use yacme_schema::{
+    account::{Contacts, CreateAccount, ExternalAccountBindingRequest},
+    directory::Directory,
+};
 
-use crate::Provider;
+use crate::{order::OrderBuilder, Provider};
 
 #[derive(Debug, Clone)]
 pub struct Account {
@@ -41,6 +44,11 @@ impl Account {
         self.provider.client()
     }
 
+    #[inline]
+    pub(crate) fn directory(&self) -> &Directory {
+        self.provider.directory()
+    }
+
     pub async fn refresh(&self) -> Result<(), AcmeError> {
         let info: Response<yacme_schema::Account> = self
             .client()
@@ -59,6 +67,14 @@ impl Account {
     pub fn info(&self) -> Arc<yacme_schema::Account> {
         self.data.info.load_full()
     }
+
+    pub fn key(&self) -> Arc<yacme_key::SigningKey> {
+        self.key.clone()
+    }
+
+    pub fn order(&self) -> OrderBuilder {
+        OrderBuilder::new(self.clone())
+    }
 }
 
 #[derive(Debug)]
@@ -68,7 +84,10 @@ struct AccountData {
 }
 
 pub struct AccountBuilder {
-    inner: yacme_schema::account::AccountBuilder,
+    contact: Contacts,
+    terms_of_service_agreed: Option<bool>,
+    only_return_existing: Option<bool>,
+    external_account_binding: Option<ExternalAccountBindingRequest>,
     key: Option<Arc<SigningKey>>,
     provider: Provider,
 }
@@ -76,35 +95,38 @@ pub struct AccountBuilder {
 impl AccountBuilder {
     pub(crate) fn new(provider: Provider) -> Self {
         AccountBuilder {
-            inner: yacme_schema::Account::builder(),
+            contact: Default::default(),
+            terms_of_service_agreed: None,
+            only_return_existing: None,
+            external_account_binding: None,
             key: None,
             provider,
         }
     }
 
     pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
-        self.inner = self.inner.external_account(binding);
+        self.external_account_binding = Some(binding);
         self
     }
 
     pub fn agree_to_terms_of_service(mut self) -> Self {
-        self.inner = self.inner.agree_to_terms_of_service();
+        self.terms_of_service_agreed = Some(true);
         self
     }
 
     pub fn add_contact_url(mut self, url: Url) -> Self {
-        self.inner = self.inner.add_contact_url(url);
+        self.contact.add_contact_url(url);
         self
     }
 
     pub fn must_exist(mut self) -> Self {
-        self.inner = self.inner.must_exist();
+        self.only_return_existing = Some(true);
         self
     }
 
-    pub fn add_contact_email(self, email: &str) -> Result<Self, url::ParseError> {
-        let url: Url = format!("mailto:{email}").parse()?;
-        Ok(self.add_contact_url(url))
+    pub fn add_contact_email(mut self, email: &str) -> Result<Self, url::ParseError> {
+        self.contact.add_contact_email(email)?;
+        Ok(self)
     }
 
     pub fn key(mut self, key: Arc<SigningKey>) -> Self {
@@ -116,12 +138,19 @@ impl AccountBuilder {
         let url = self.provider.directory().new_account.clone();
         let key = self.key.ok_or(AcmeError::MissingKey)?;
         let public_key = key.public_key();
-        let request = self.inner.build(&public_key, url.clone());
+        let payload = CreateAccount {
+            contact: self.contact,
+            terms_of_service_agreed: self.terms_of_service_agreed,
+            only_return_existing: self.only_return_existing,
+            external_account_binding: self
+                .external_account_binding
+                .map(|binding| binding.token(&public_key, url.clone())),
+        };
 
         let account: Response<yacme_schema::Account> = self
             .provider
             .client()
-            .execute(Request::post(request, url, key.clone()))
+            .execute(Request::post(payload, url, key.clone()))
             .await?;
 
         let account_url = account
@@ -137,7 +166,7 @@ impl AccountBuilder {
     }
 
     pub async fn get(mut self) -> Result<Account, AcmeError> {
-        self.inner = self.inner.must_exist();
+        self.only_return_existing = Some(true);
         self.create().await
     }
 }

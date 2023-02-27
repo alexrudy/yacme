@@ -42,7 +42,7 @@ impl From<&str> for ExternalAccountId {
 /// The token used to bind an external account based on a Key from
 /// the provider.
 #[derive(Debug, Serialize)]
-struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
+pub struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
 
 // Create alias for HMAC-SHA256
 type HmacSha256 = hmac::Hmac<sha2::Sha256>;
@@ -55,7 +55,7 @@ pub struct ExternalAccountBindingRequest {
 }
 
 impl ExternalAccountBindingRequest {
-    fn token(&self, public_key: &PublicKey, url: Url) -> ExternalAccountToken {
+    pub fn token(&self, public_key: &PublicKey, url: Url) -> ExternalAccountToken {
         let token = UnsignedToken::post(
             ProtectedHeader::new(
                 SignatureAlgorithm::HS256,
@@ -78,6 +78,10 @@ impl ExternalAccountBindingRequest {
 pub struct Contacts(HashSet<Url>);
 
 impl Contacts {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     pub fn add_contact_url(&mut self, url: Url) {
         self.0.insert(url);
     }
@@ -116,12 +120,6 @@ pub struct Account {
     pub orders: Url,
 }
 
-impl Account {
-    pub fn builder() -> AccountBuilder {
-        AccountBuilder::new()
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountStatus {
@@ -131,27 +129,31 @@ pub enum AccountStatus {
 }
 
 /// Request payload for creating a new account
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAccount {
+    /// List of contact URIs
     #[serde(skip_serializing_if = "Contacts::is_empty")]
-    contact: Contacts,
+    pub contact: Contacts,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    terms_of_service_agreed: Option<bool>,
+    pub terms_of_service_agreed: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    only_return_existing: Option<bool>,
+    pub only_return_existing: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    external_account_binding: Option<ExternalAccountToken>,
+    pub external_account_binding: Option<ExternalAccountToken>,
 }
 
 /// Request payload for updating an existing account
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAccount {
     #[serde(skip_serializing_if = "Contacts::is_empty")]
-    contact: Contacts,
+    pub contact: Contacts,
     #[serde(skip_serializing_if = "Option::is_none")]
-    external_account_binding: Option<ExternalAccountToken>,
+    pub external_account_binding: Option<ExternalAccountToken>,
 }
 
 impl UpdateAccount {
@@ -166,67 +168,6 @@ impl UpdateAccount {
 #[cfg(test)]
 #[derive(Serialize)]
 pub(super) struct CreateAccountPayload(CreateAccount);
-
-/// Builder struct to create a new account
-#[derive(Debug, Default)]
-pub struct AccountBuilder {
-    contact: Contacts,
-    terms_of_service_agreed: Option<bool>,
-    only_return_existing: Option<bool>,
-    external_account_binding: Option<ExternalAccountBindingRequest>,
-}
-
-impl AccountBuilder {
-    pub fn new() -> Self {
-        AccountBuilder {
-            contact: Contacts::default(),
-            terms_of_service_agreed: None,
-            only_return_existing: None,
-            external_account_binding: None,
-        }
-    }
-
-    pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
-        self.external_account_binding = Some(binding);
-        self
-    }
-
-    pub fn agree_to_terms_of_service(mut self) -> Self {
-        self.terms_of_service_agreed = Some(true);
-        self
-    }
-
-    pub fn add_contact_url(mut self, url: Url) -> Self {
-        self.contact.add_contact_url(url);
-        self
-    }
-
-    pub fn must_exist(mut self) -> Self {
-        self.only_return_existing = Some(true);
-        self
-    }
-
-    pub fn add_contact_email(mut self, email: &str) -> Result<Self, url::ParseError> {
-        self.contact.add_contact_email(email)?;
-        Ok(self)
-    }
-
-    pub fn build(self, public_key: &PublicKey, url: Url) -> CreateAccount {
-        CreateAccount {
-            contact: self.contact,
-            terms_of_service_agreed: self.terms_of_service_agreed,
-            only_return_existing: self.only_return_existing,
-            external_account_binding: self
-                .external_account_binding
-                .map(|e| e.token(public_key, url)),
-        }
-    }
-
-    #[cfg(test)]
-    pub(super) fn build_payload(self, public_key: &PublicKey, url: Url) -> CreateAccountPayload {
-        CreateAccountPayload(self.build(public_key, url))
-    }
-}
 
 #[cfg(test)]
 mod test {
@@ -254,23 +195,24 @@ mod test {
     fn new_account_request() {
         let nonce = "6S8IqOGY7eL2lsGoTZYifg";
         let key = crate::key!("ec-p255");
-        let builder = crate::account::AccountBuilder::new()
+        let mut contacts = Contacts::new();
+        contacts
             .add_contact_email("cert-admin@example.org")
-            .unwrap()
-            .add_contact_email("admin@example.org")
-            .unwrap()
-            .agree_to_terms_of_service();
+            .unwrap();
+        contacts.add_contact_email("admin@example.org").unwrap();
 
         let header = ProtectedHeader::new_acme_header(
             &key,
             "https://example.com/acme/new-account".parse().unwrap(),
             Nonce::from(nonce.to_owned()),
         );
-        let public = key.public_key();
-        let payload = builder.build_payload(
-            &public,
-            "https://example.com/acme/new-account".parse().unwrap(),
-        );
+
+        let payload = CreateAccount {
+            contact: contacts,
+            terms_of_service_agreed: Some(true),
+            only_return_existing: None,
+            external_account_binding: None,
+        };
 
         let token = UnsignedToken::post(header, &payload);
         let signed_token = token.sign(key.deref()).unwrap();

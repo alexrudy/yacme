@@ -12,6 +12,7 @@ use yacme_schema::directory::Directory;
 
 pub mod account;
 mod client;
+pub mod order;
 
 use crate::client::Client;
 

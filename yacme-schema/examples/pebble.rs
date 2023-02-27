@@ -15,6 +15,7 @@ use reqwest::Url;
 use serde::Serialize;
 use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_protocol::{Client, Request, Response};
+use yacme_schema::account::{Contacts, CreateAccount};
 use yacme_schema::authorizations::Authorization;
 use yacme_schema::challenges::{Challenge, ChallengeReadyRequest};
 use yacme_schema::directory::Directory;
@@ -88,11 +89,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
-    let account_request = yacme_schema::Account::builder()
-        .add_contact_email("hello@example.test")
-        .unwrap()
-        .agree_to_terms_of_service()
-        .build(&key.public_key(), directory.new_account.clone());
+    let contact = {
+        let mut contact = Contacts::new();
+        contact.add_contact_email("hello@example.test")?;
+        contact
+    };
+
+    let account_request = CreateAccount {
+        contact,
+        terms_of_service_agreed: Some(true),
+        ..Default::default()
+    };
+
     let account: Response<Account> = client
         .execute(Request::post(
             account_request,

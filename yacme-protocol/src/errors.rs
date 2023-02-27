@@ -46,6 +46,9 @@ pub enum AcmeError {
 
     #[error("Signing Key is missing")]
     MissingKey,
+
+    #[error("{0} is not ready")]
+    NotReady(&'static str),
 }
 
 impl AcmeError {
