@@ -62,6 +62,14 @@ impl PublicKey {
     }
 }
 
+impl PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_jwk() == other.to_jwk()
+    }
+}
+
+impl Eq for PublicKey {}
+
 impl<T> From<Box<T>> for PublicKey
 where
     T: PublicKeyAlgorithm + 'static,
@@ -97,6 +105,14 @@ pub enum SignatureKind {
     Ecdsa(EcdsaAlgorithm),
 }
 
+impl SignatureKind {
+    pub fn random(&self) -> SigningKey {
+        match self {
+            SignatureKind::Ecdsa(ecdsa) => SigningKey(ecdsa.random().into()),
+        }
+    }
+}
+
 /// Signing key to authenticate an ACME account
 ///
 /// Read a signing key from a PKCS#8 PEM-encoded file:
@@ -115,7 +131,7 @@ pub enum SignatureKind {
 /// ```
 ///
 /// ⚠️ *Do not use this key, it is an example used for testing only*!
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SigningKey(InnerSigningKey);
 
 impl SigningKey {
@@ -185,6 +201,20 @@ impl InnerSigningKey {
         }
     }
 }
+
+impl From<EcdsaSigningKey> for InnerSigningKey {
+    fn from(value: EcdsaSigningKey) -> Self {
+        InnerSigningKey::Ecdsa(Box::new(value) as _)
+    }
+}
+
+impl PartialEq for InnerSigningKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.public_key() == other.public_key()
+    }
+}
+
+impl Eq for InnerSigningKey {}
 
 impl signature::Signer<Signature> for InnerSigningKey {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, ::ecdsa::Error> {

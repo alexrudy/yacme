@@ -11,20 +11,18 @@ use yacme_protocol::Base64Data;
 use crate::identifier::Identifier;
 use yacme_protocol::errors::AcmeError;
 use yacme_protocol::errors::AcmeErrorDocument;
-use yacme_protocol::Client;
-use yacme_protocol::Request;
 use yacme_protocol::Url;
 
 const PEM_DOCUMENT_BEGIN: &str = "-----BEGIN";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Orders {
-    orders: Vec<Url>,
+    pub orders: Vec<Url>,
     #[serde(default)]
-    next: Option<Url>,
+    pub next: Option<Url>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
     status: OrderStatus,
@@ -39,10 +37,6 @@ pub struct Order {
 }
 
 impl Order {
-    pub fn builder() -> OrderBuilder {
-        OrderBuilder::new()
-    }
-
     pub fn status(&self) -> &OrderStatus {
         &self.status
     }
@@ -80,7 +74,7 @@ impl Order {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OrderStatus {
     Pending,
@@ -90,11 +84,11 @@ pub enum OrderStatus {
     Invalid,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct NewOrderRequest {
-    identifiers: Vec<Identifier>,
-    not_before: Option<DateTime<Utc>>,
-    not_after: Option<DateTime<Utc>>,
+    pub identifiers: Vec<Identifier>,
+    pub not_before: Option<DateTime<Utc>>,
+    pub not_after: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,72 +112,6 @@ impl FinalizeOrder {
 impl From<SignedCertificateRequest> for FinalizeOrder {
     fn from(value: SignedCertificateRequest) -> Self {
         FinalizeOrder { csr: value.into() }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct OrderBuilder {
-    identifiers: Vec<Identifier>,
-    not_before: Option<DateTime<Utc>>,
-    not_after: Option<DateTime<Utc>>,
-}
-
-impl OrderBuilder {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn push(&mut self, identifier: Identifier) {
-        self.identifiers.push(identifier);
-    }
-
-    pub fn dns<S: Into<String>>(&mut self, identifier: S) {
-        self.identifiers.push(Identifier::dns(identifier.into()))
-    }
-
-    pub fn start(&mut self, when: DateTime<Utc>) {
-        self.not_before = Some(when);
-    }
-
-    pub fn end(&mut self, when: DateTime<Utc>) {
-        self.not_after = Some(when);
-    }
-
-    pub fn build(self) -> NewOrderRequest {
-        NewOrderRequest {
-            identifiers: self.identifiers,
-            not_before: self.not_before,
-            not_after: self.not_after,
-        }
-    }
-}
-
-pub async fn list_orders(
-    client: &mut Client,
-    mut request: Request<()>,
-    limit: Option<usize>,
-) -> Result<Vec<Url>, AcmeError> {
-    let mut orders = Vec::new();
-    let mut page = 0;
-    loop {
-        tracing::debug!("Fetching orders, page {page}");
-        let response = client.execute(request.clone()).await?;
-        let orders_page: Orders = response.into_inner();
-        orders.extend(orders_page.orders.into_iter());
-
-        if let Some(lim) = limit {
-            if orders.len() >= lim {
-                return Ok(orders);
-            }
-        }
-
-        match orders_page.next {
-            Some(next_url) => {
-                request = request.with_url(next_url);
-            }
-            None => return Ok(orders),
-        }
-        page += 1;
     }
 }
 

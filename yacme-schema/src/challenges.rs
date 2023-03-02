@@ -40,6 +40,14 @@ impl Challenge {
         }
     }
 
+    pub fn name(&self) -> Option<&'static str> {
+        match self {
+            Challenge::Http01(_) => Some("http-01"),
+            Challenge::Dns01(_) => Some("dns-01"),
+            _ => None,
+        }
+    }
+
     pub fn url(&self) -> Option<Url> {
         self.info().map(|i| i.url.clone())
     }

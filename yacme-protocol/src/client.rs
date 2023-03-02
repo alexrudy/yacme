@@ -9,10 +9,10 @@ use crate::response::{Decode, Response};
 use crate::Request;
 use crate::Url;
 
-#[cfg(feature = "debug-messages")]
-use yacme_protocol::fmt::AcmeFormat;
+#[cfg(feature = "trace-requests")]
+use crate::fmt::AcmeFormat;
 
-#[cfg(feature = "debug-messages")]
+#[cfg(feature = "trace-requests")]
 use crate::request::Encode;
 
 const NONCE_HEADER: &str = "Replay-Nonce";
@@ -105,7 +105,7 @@ impl Client {
     }
 
     /// Execute an HTTP request using the ACME protocol.
-    #[cfg(not(feature = "debug-messages"))]
+    #[cfg(not(feature = "trace-requests"))]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
@@ -114,17 +114,17 @@ impl Client {
         Response::from_decoded_response(self.execute_internal(request).await?).await
     }
 
-    #[cfg(feature = "debug-messages")]
+    #[cfg(feature = "trace-requests")]
     pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: Decode + Encode,
     {
-        eprintln!("{}", request.as_signed().formatted());
+        tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
             .await
             .map(|r| {
-                eprintln!("{}", r.formatted());
+                tracing::trace!("RES: \n{}", r.formatted());
                 r
             })
     }

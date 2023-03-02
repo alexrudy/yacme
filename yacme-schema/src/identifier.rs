@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use yacme_key::cert::RequestedSubjectName;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Identifier {
     Dns {

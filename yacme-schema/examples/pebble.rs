@@ -13,14 +13,15 @@ use std::sync::Arc;
 
 use reqwest::Url;
 use serde::Serialize;
+use yacme_key::SignatureKind;
 use yacme_protocol::jose::AccountKeyIdentifier;
 use yacme_protocol::{Client, Request, Response};
 use yacme_schema::account::{Contacts, CreateAccount};
 use yacme_schema::authorizations::Authorization;
 use yacme_schema::challenges::{Challenge, ChallengeReadyRequest};
 use yacme_schema::directory::Directory;
-use yacme_schema::orders::{CertificateChain, FinalizeOrder, OrderStatus};
-use yacme_schema::{Account, Order};
+use yacme_schema::orders::{CertificateChain, FinalizeOrder, NewOrderRequest, OrderStatus};
+use yacme_schema::{Account, Identifier, Order};
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 
@@ -52,17 +53,14 @@ fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme_key::SigningKey
 
 const PRIVATE_KEY_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../reference-keys/ec-p255.pem");
-const CERTIFICATE_KEY_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../reference-keys/ec-p255-cert.pem"
-);
+
 const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pebble/pebble.minica.pem");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("Loading root certificate from {PEBBLE_ROOT_CA}");
+    tracing::debug!("Loading root certificate from {PEBBLE_ROOT_CA}");
     let cert = reqwest::Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
     let client = reqwest::Client::builder()
         .add_root_certificate(cert.clone())
@@ -109,32 +107,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .await?;
 
-    tracing::debug!("Account: {account:#?}");
+    tracing::trace!("Account: \n{account:#?}");
     let account_id: AccountKeyIdentifier = account.location().unwrap().into();
     let account_key = (key.clone(), account_id);
 
     tracing::info!("Requesting order");
-    let mut order_request = Order::builder();
-    order_request.dns("www.example.test");
-    order_request.dns("internal.example.test");
+
+    let identifiers = vec![
+        Identifier::dns("www.example.test".into()),
+        Identifier::dns("internal.example.test".into()),
+    ];
+
+    let payload = NewOrderRequest {
+        identifiers,
+        ..Default::default()
+    };
 
     let order: Response<Order> = client
         .execute(Request::post(
-            order_request.build(),
+            payload,
             directory.new_order.clone(),
             account_key.clone(),
         ))
         .await?;
 
     let order_url = order.location().expect("New order should have a location");
-    tracing::debug!("Order: {order:#?}");
+    tracing::trace!("Order: \n{order:#?}");
 
     tracing::info!("Completing Authorizations");
     for authz_url in order.payload().authorizations() {
         let authz = client
             .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
             .await?;
-        tracing::debug!("Authz: {authz:#?}");
+        tracing::trace!("Authz:\n{authz:#?}");
 
         let challenge = authz
             .payload()
@@ -149,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if !challenge.is_finished() {
             tracing::info!("Solving challenge");
-            tracing::debug!("Challenge: {:#?}", challenge);
+            tracing::trace!("Challenge:\n{:#?}", challenge);
 
             #[derive(Debug, Serialize)]
             struct Http01ChallengeSetup {
@@ -162,8 +167,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 content: challenge.authorization(&key).deref().to_owned(),
             };
 
-            tracing::debug!(
-                "Challenge Setup: {}",
+            tracing::trace!(
+                "Challenge Setup:\n{}",
                 serde_json::to_string(&chall_setup).unwrap()
             );
 
@@ -201,7 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let authz = client
                 .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
                 .await?;
-            tracing::debug!("Authz: {authz:#?}");
+            tracing::trace!("Authz:\n{authz:#?}");
 
             let challenge = authz
                 .payload()
@@ -214,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if challenge.is_finished() {
                 tracing::info!("Completed authorization");
-                tracing::debug!("{:#?}", authz);
+                tracing::trace!("Authz:\n{:#?}", authz);
                 break;
             }
 
@@ -222,8 +227,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     tracing::info!("Finalizing order");
-    println!("Loading certificate private key from {CERTIFICATE_KEY_PATH:?}");
-    let key = Arc::new(read_private_key(CERTIFICATE_KEY_PATH)?);
+    tracing::debug!("Generating random certificate key");
+    let key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
     let finalize = FinalizeOrder::new(order.payload(), &key);
     let mut order = client
         .execute::<_, Order>(Request::post(
@@ -234,7 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     tracing::info!("Finalized order: {:?}", order.status());
-    tracing::debug!("Order: {order:#?}");
+    tracing::trace!("Order:\n{order:#?}");
 
     while matches!(order.payload().status(), OrderStatus::Processing) {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;

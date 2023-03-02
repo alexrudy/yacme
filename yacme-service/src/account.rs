@@ -2,22 +2,29 @@
 //!
 use std::sync::Arc;
 
-use arc_swap::ArcSwap;
+use arc_swap::Guard;
 
 use yacme_key::SigningKey;
-use yacme_protocol::{AcmeError, Request, Response, Url};
+use yacme_protocol::{request::Key, AcmeError, Request, Response, Url};
 use yacme_schema::{
+    account::Account as AccountSchema,
     account::{Contacts, CreateAccount, ExternalAccountBindingRequest},
     directory::Directory,
 };
 
-use crate::{order::OrderBuilder, Provider};
+use crate::{
+    cache::Cache,
+    order::{Order, OrderBuilder, OrderState},
+    Container, Provider,
+};
+
+type AccountState = Cache<Order, OrderState>;
 
 #[derive(Debug, Clone)]
 pub struct Account {
     provider: Provider,
     key: Arc<yacme_key::SigningKey>,
-    data: Arc<AccountData>,
+    data: Container<AccountSchema, AccountState>,
 }
 
 impl Account {
@@ -27,15 +34,10 @@ impl Account {
         info: yacme_schema::Account,
         url: Url,
     ) -> Self {
-        let data = AccountData {
-            info: ArcSwap::new(Arc::new(info)),
-            url,
-        };
-
         Self {
             provider,
             key,
-            data: Arc::new(data),
+            data: Container::new(info, url),
         }
     }
 
@@ -49,38 +51,56 @@ impl Account {
         self.provider.directory()
     }
 
+    /// Refresh this account's data from the ACME service
     pub async fn refresh(&self) -> Result<(), AcmeError> {
-        let info: Response<yacme_schema::Account> = self
-            .client()
-            .execute(Request::get(self.data.url.clone(), self.key.clone()))
-            .await?;
-
-        self.data.info.store(Arc::new(info.into_inner()));
-
-        Ok(())
+        self.data.refresh(self.client(), self.request_key()).await
     }
 
     pub async fn update(&self) -> UpdateAccount {
         UpdateAccount::new(self.clone())
     }
 
-    pub fn info(&self) -> Arc<yacme_schema::Account> {
-        self.data.info.load_full()
+    /// The raw [`yacme_schema::Account`] associated with this account
+    pub fn schema(&self) -> Guard<Arc<yacme_schema::Account>> {
+        self.data.schema()
     }
 
+    /// Signing key which identifies this account
     pub fn key(&self) -> Arc<yacme_key::SigningKey> {
         self.key.clone()
     }
 
+    /// Identifying URL for this account
+    pub fn url(&self) -> &Url {
+        self.data.url()
+    }
+
+    /// Key used for signing requests, including identifier
+    pub(crate) fn request_key(&self) -> impl Into<Key> {
+        (self.key(), self.data.url().clone())
+    }
+
+    /// Create a new order for a certificate
     pub fn order(&self) -> OrderBuilder {
         OrderBuilder::new(self.clone())
     }
-}
 
-#[derive(Debug)]
-struct AccountData {
-    info: ArcSwap<yacme_schema::Account>,
-    url: Url,
+    /// Get a list of orders associated with this account
+    pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order>, AcmeError> {
+        let orders = crate::order::list(self, limit).await?;
+
+        let mut cache = self.cache().inner();
+
+        for order in &orders {
+            cache.insert(order.clone());
+        }
+
+        Ok(orders)
+    }
+
+    pub(crate) fn cache(&self) -> &Cache<Order, OrderState> {
+        self.data.state()
+    }
 }
 
 pub struct AccountBuilder {
@@ -136,7 +156,7 @@ impl AccountBuilder {
 
     pub async fn create(self) -> Result<Account, AcmeError> {
         let url = self.provider.directory().new_account.clone();
-        let key = self.key.ok_or(AcmeError::MissingKey)?;
+        let key = self.key.ok_or(AcmeError::MissingKey("account"))?;
         let public_key = key.public_key();
         let payload = CreateAccount {
             contact: self.contact,
@@ -180,7 +200,7 @@ pub struct UpdateAccount {
 impl UpdateAccount {
     fn new(account: Account) -> Self {
         UpdateAccount {
-            contact: account.info().contact.clone(),
+            contact: account.schema().contact.clone(),
             account,
         }
     }
@@ -190,7 +210,7 @@ impl UpdateAccount {
     }
 
     pub async fn update(self) -> Result<(), AcmeError> {
-        let url = self.account.data.url.clone();
+        let url = self.account.url().clone();
         let key = self.account.key.clone();
         let request = yacme_schema::account::UpdateAccount::new(self.contact);
 
@@ -200,7 +220,7 @@ impl UpdateAccount {
             .execute(Request::post(request, url, key))
             .await?;
 
-        self.account.data.info.store(Arc::new(account.into_inner()));
+        self.account.data.store(account.into_inner());
         Ok(())
     }
 }

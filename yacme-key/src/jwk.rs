@@ -19,7 +19,7 @@ use sha2::Digest;
 ///
 /// Along with serialization, JWK exposes a [Jwk::thumbprint] method for computing
 /// the key thumbprint required for ACME authorization challenges.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Jwk(InnerJwk);
 
 impl fmt::Debug for Jwk {
@@ -45,7 +45,7 @@ impl Jwk {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 enum InnerJwk {
     EllipticCurve(elliptic_curve::JwkEcKey),
 }

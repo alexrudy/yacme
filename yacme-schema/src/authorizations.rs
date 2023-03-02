@@ -13,7 +13,7 @@ use crate::identifier::Identifier;
 ///   as the status of the authorization (e.g., "pending", "valid", or
 ///   "revoked") and which challenges were used to validate possession of
 ///   the identifier.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Authorization {
     /// The identifier that the account is authorized to represent.
     pub identifier: Identifier,
@@ -39,7 +39,7 @@ pub struct Authorization {
 }
 
 /// Status of an individual ACME authorization for an [`Identifier`]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthroizationStatus {
     /// The ACME server is waiting on the client to attempt authorization

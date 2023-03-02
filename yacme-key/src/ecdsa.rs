@@ -2,6 +2,7 @@
 
 use const_oid::AssociatedOid;
 use elliptic_curve::sec1::ToEncodedPoint;
+use signature::rand_core::OsRng;
 
 use crate::{PublicKeyAlgorithm, Signature};
 
@@ -10,6 +11,16 @@ use crate::{PublicKeyAlgorithm, Signature};
 pub enum EcdsaAlgorithm {
     /// The NIST P-256 (a.k.a. secp256r1, prime256v1) elliptic curve.
     P256,
+}
+
+impl EcdsaAlgorithm {
+    pub(crate) fn random(&self) -> EcdsaSigningKey {
+        match self {
+            EcdsaAlgorithm::P256 => {
+                EcdsaSigningKey::P256(::elliptic_curve::SecretKey::random(&mut OsRng))
+            }
+        }
+    }
 }
 
 /// Implements the ECDSA signature scheme across

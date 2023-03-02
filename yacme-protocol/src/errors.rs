@@ -44,8 +44,8 @@ pub enum AcmeError {
     #[error("Required configuration data is missing: {0}")]
     MissingData(&'static str),
 
-    #[error("Signing Key is missing")]
-    MissingKey,
+    #[error("Signing Key for {0} is missing")]
+    MissingKey(&'static str),
 
     #[error("{0} is not ready")]
     NotReady(&'static str),

@@ -156,6 +156,15 @@ impl From<(Arc<SigningKey>, Option<AccountKeyIdentifier>)> for Key {
     }
 }
 
+impl From<(Arc<SigningKey>, Url)> for Key {
+    fn from((key, id): (Arc<SigningKey>, Url)) -> Self {
+        Key::Identified(Identified {
+            identifier: AccountKeyIdentifier::from(id),
+            key,
+        })
+    }
+}
+
 impl From<Arc<SigningKey>> for Key {
     fn from(value: Arc<SigningKey>) -> Self {
         Key::Signed(Signed { key: value })

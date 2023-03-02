@@ -4,17 +4,98 @@
 
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use arc_swap::{ArcSwap, Guard};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
-use yacme_protocol::{AcmeError, Result, Url};
+use yacme_protocol::{
+    request::{Encode, Key},
+    AcmeError, Request, Response, Result, Url,
+};
 use yacme_schema::directory::Directory;
 
 pub mod account;
+pub mod authorization;
+pub(crate) mod cache;
 mod client;
 pub mod order;
 
 use crate::client::Client;
+
+#[derive(Debug)]
+pub(crate) struct InnerContainer<T, S> {
+    schema: ArcSwap<T>,
+    url: Url,
+    state: S,
+}
+
+impl<T, S> InnerContainer<T, S> {
+    pub(crate) fn new(schema: T, url: Url, state: S) -> Self {
+        Self {
+            schema: ArcSwap::new(Arc::new(schema)),
+            url,
+            state,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Container<T, S> {
+    inner: Arc<InnerContainer<T, S>>,
+}
+
+impl<T, S> Container<T, S>
+where
+    S: Default,
+{
+    pub(crate) fn new(item: T, url: Url) -> Self {
+        Self {
+            inner: Arc::new(InnerContainer::new(item, url, S::default())),
+        }
+    }
+}
+
+impl<T, S> Clone for Container<T, S> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<T, S> Container<T, S> {
+    #[inline]
+    pub(crate) fn store(&self, item: T) {
+        self.inner.schema.store(Arc::new(item))
+    }
+
+    #[inline]
+    pub(crate) fn schema(&self) -> Guard<Arc<T>> {
+        self.inner.schema.load()
+    }
+
+    #[inline]
+    pub(crate) fn state(&self) -> &S {
+        &self.inner.state
+    }
+
+    #[inline]
+    pub(crate) fn url(&self) -> &Url {
+        &self.inner.url
+    }
+}
+impl<T, S> Container<T, S>
+where
+    T: DeserializeOwned + Encode,
+{
+    pub(crate) async fn refresh<K: Into<Key>>(&self, client: &Client, key: K) -> Result<()> {
+        let info: Response<T> = client
+            .execute(Request::get(self.url().clone(), key))
+            .await?;
+        self.store(info.into_inner());
+        Ok(())
+    }
+}
 
 /// An ACME Service Provider
 ///
@@ -160,6 +241,8 @@ impl ProviderBuilder {
                 .into_inner()
         };
 
+        client.set_new_nonce_url(directory.new_nonce.clone());
+
         let data = ProviderData {
             name: self.name,
             url,
@@ -171,4 +254,10 @@ impl ProviderBuilder {
             client: Client::new(client),
         })
     }
+}
+
+pub mod provider {
+
+    #[cfg(feature = "pebble")]
+    pub const PEBBLE: &str = "https://localhost:14000/dir";
 }

@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 arc-swap.workspace = true
+chrono.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 thiserror.workspace = true
@@ -16,3 +17,15 @@ url.workspace = true
 yacme-key.workspace = true
 yacme-protocol.workspace = true
 yacme-schema.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[features]
+pebble = []
+trace-requests = ["yacme-protocol/trace-requests"]
+
+[[example]]
+name = "pebble"
+required-features = ["pebble"]
