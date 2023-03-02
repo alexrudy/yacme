@@ -61,6 +61,19 @@ pub enum AuthroizationStatus {
     Revoked,
 }
 
+impl AuthroizationStatus {
+    pub fn is_finished(&self) -> bool {
+        matches!(
+            self,
+            AuthroizationStatus::Valid
+                | AuthroizationStatus::Invalid
+                | AuthroizationStatus::Deactivated
+                | AuthroizationStatus::Expired
+                | AuthroizationStatus::Revoked
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

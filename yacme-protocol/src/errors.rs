@@ -49,6 +49,9 @@ pub enum AcmeError {
 
     #[error("{0} is not ready")]
     NotReady(&'static str),
+
+    #[error("{0} is not a known challenge type")]
+    UnknownChallenge(String),
 }
 
 impl AcmeError {

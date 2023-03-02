@@ -11,6 +11,8 @@
 
 use std::fmt::Write;
 
+use chrono::{DateTime, Utc};
+use http::HeaderMap;
 use serde::de::DeserializeOwned;
 
 use crate::fmt::{self, HttpCase};
@@ -78,6 +80,28 @@ impl<T> Response<T> {
     /// Destination URL from the original request.
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// The headers returned with this response
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    /// The seconds to wait for a retry, from now.
+    pub fn retry_after(&self) -> Option<std::time::Duration> {
+        self.headers()
+            .get(http::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| {
+                if v.contains("GMT") {
+                    DateTime::parse_from_rfc2822(v)
+                        .map(|ts| ts.signed_duration_since(Utc::now()))
+                        .ok()
+                        .and_then(|d| d.to_std().ok())
+                } else {
+                    v.parse::<u64>().ok().map(std::time::Duration::from_secs)
+                }
+            })
     }
 
     /// Get the [`Nonce`] from this response.

@@ -6,8 +6,8 @@ use yacme_key::SigningKey;
 use yacme_protocol::{AcmeError, Request, Response, Url};
 use yacme_schema::{
     authorizations::Authorization as AuthorizationSchema,
-    orders::Order as OrderSchema,
     orders::{CertificateChain, FinalizeOrder, NewOrderRequest, Orders},
+    orders::{Order as OrderSchema, OrderStatus},
     Identifier,
 };
 
@@ -144,6 +144,7 @@ impl Order {
     }
 
     pub async fn finalize(&self) -> Result<(), AcmeError> {
+        tracing::trace!("Creating CSR for finalization request");
         let Some(certificate_key) = self.certificate_key.as_ref() else { return Err(AcmeError::MissingKey("certificate")) };
 
         let body = FinalizeOrder::new(self.data.schema().as_ref(), certificate_key);
@@ -152,9 +153,55 @@ impl Order {
             self.data.schema().finalize().clone(),
             self.account().request_key(),
         );
-
+        tracing::trace!("Sending order finalize request");
         let info: Response<yacme_schema::Order> = self.client().execute(request).await?;
         self.data.store(info.into_inner());
+
+        Ok(())
+    }
+
+    async fn poll_for_order_ready(&self) -> Result<(), AcmeError> {
+        self.refresh().await?;
+        match self.schema().status() {
+            OrderStatus::Valid | OrderStatus::Invalid => {
+                tracing::debug!(status=?self.schema().status(), "Order was already finished");
+                return Ok(());
+            }
+            OrderStatus::Ready | OrderStatus::Pending => {
+                return Err(AcmeError::NotReady("Order is not finalized"));
+            }
+            OrderStatus::Processing => {
+                tracing::trace!("Polling for readiness");
+            }
+        }
+
+        loop {
+            tracing::trace!("Fetching authorization to check status");
+            let info: Response<OrderSchema> = self
+                .client()
+                .execute(Request::get(
+                    self.url().clone(),
+                    self.account().request_key(),
+                ))
+                .await?;
+
+            let delay = info
+                .retry_after()
+                .unwrap_or_else(|| std::time::Duration::from_secs(1));
+
+            self.data.store(info.into_inner());
+            if matches!(
+                self.schema().status(),
+                OrderStatus::Valid | OrderStatus::Invalid
+            ) {
+                tracing::debug!(status=?self.schema().status(), "Order is finished");
+                break;
+            }
+
+            tracing::trace!(status=?self.schema().status(), delay=?delay, "Order is not finished");
+            tokio::time::sleep(delay).await;
+        }
+
         Ok(())
     }
 
@@ -166,6 +213,12 @@ impl Order {
         let certificate: Response<CertificateChain> = self.client().execute(request).await?;
 
         Ok(certificate.into_inner())
+    }
+
+    pub async fn finalize_and_donwload(&self) -> Result<CertificateChain, AcmeError> {
+        self.finalize().await?;
+        self.poll_for_order_ready().await?;
+        self.download().await
     }
 }
 
