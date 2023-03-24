@@ -1,5 +1,5 @@
 [workspace]
-members = ["yacme-*"]
+members = ["yacme", "yacme-*"]
 
 [workspace.dependencies]
 arc-swap = "1.6.0"
@@ -42,3 +42,4 @@ mime = "0.3.16"
 yacme-key = { path = "yacme-key/" }
 yacme-protocol = { path = "yacme-protocol/" }
 yacme-schema = { path = "yacme-schema/" }
+yacme-service = { path = "yacme-service/" }

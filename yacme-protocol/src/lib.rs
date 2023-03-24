@@ -1,3 +1,5 @@
+//! # ACME JWT implementation and ACME request types.
+
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -13,7 +15,10 @@ pub use base64::Base64Data;
 pub use base64::Base64JSON;
 pub use client::Client;
 pub use errors::AcmeError;
+
+#[doc(no_inline)]
 pub use request::Request;
+#[doc(no_inline)]
 pub use response::Response;
 use serde::{Deserialize, Serialize};
 

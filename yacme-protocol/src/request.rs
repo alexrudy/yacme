@@ -251,7 +251,7 @@ impl<T> Request<T> {
     }
 }
 impl Request<()> {
-    /// Create a `GET-as-POST` request with a given payload.
+    /// Create a `GET-as-POST` request with an empty payload.
     ///
     /// When making an authenticated `GET` request to an ACME server, the client
     /// sends a `POST` request, with a JWS body where the payload is the empty

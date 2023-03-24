@@ -168,6 +168,8 @@ impl Provider {
     }
 }
 
+/// Error occured when building a provider,
+/// or building the HTTP client used to power the provider.
 #[derive(Debug, Error)]
 pub enum BuilderError {
     #[error("Building HTTPS client: {0}")]
@@ -178,6 +180,7 @@ pub enum BuilderError {
     Directory(#[source] AcmeError),
 }
 
+/// Build a provider from a directory or the URL of a directory.
 #[derive(Debug)]
 pub struct ProviderBuilder {
     client: yacme_protocol::client::ClientBuilder,
@@ -196,36 +199,44 @@ impl ProviderBuilder {
         }
     }
 
+    /// Explicitly add an additional root certificate to the underlying HTTP client.
     pub fn add_root_certificate(mut self, cert: reqwest::Certificate) -> Self {
         self.client = self.client.add_root_certificate(cert);
         self
     }
 
+    /// Set a timeout for requests to complete.
     pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
         self.client = self.client.timeout(timeout);
         self
     }
 
+    /// Set a timeout for requests to connect.
     pub fn connect_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.client = self.client.connect_timeout(timeout);
         self
     }
 
+    /// Set the dircetory URL, which will be used to fetch the directory if it isn't provided.
     pub fn directory_url(mut self, url: Url) -> Self {
         self.url = Some(url);
         self
     }
 
+    /// Set the full directory structure. This will be used instead of fetching the directory from
+    /// the provided URL.
     pub fn directory(mut self, directory: Directory) -> Self {
         self.directory = Some(directory);
         self
     }
 
+    /// Set the name of the provider, used for diagnostic messages.
     pub fn name<S: Into<String>>(mut self, name: S) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    /// Build the provider.
     pub async fn build(self) -> ::std::result::Result<Provider, BuilderError> {
         let mut client = self.client.build().map_err(BuilderError::Client)?;
 
@@ -256,6 +267,7 @@ impl ProviderBuilder {
     }
 }
 
+/// Included ACME provider information.
 pub mod provider {
 
     #[cfg(feature = "pebble")]
