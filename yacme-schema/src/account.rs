@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
-use serde::ser::SerializeSeq;
-use serde::{Deserialize, Serialize};
+use serde::{ser, Deserialize, Serialize};
 use signature::digest::KeyInit;
 
 use yacme_key::jwk::Jwk;
@@ -78,22 +77,6 @@ impl ExternalAccountBindingRequest {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Contacts(HashSet<Url>);
 
-impl Serialize for Contacts {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut data: Vec<_> = self.0.iter().collect();
-        data.sort_by_key(|url| url.as_str());
-
-        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
-        for url in data {
-            seq.serialize_element(url)?;
-        }
-        seq.end()
-    }
-}
-
 impl Contacts {
     pub fn new() -> Self {
         Default::default()
@@ -123,6 +106,22 @@ impl Contacts {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl ser::Serialize for Contacts {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        let mut contacts = self.0.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        contacts.sort();
+        let mut seq = serializer.serialize_seq(Some(contacts.len()))?;
+        for contact in contacts {
+            seq.serialize_element(&contact)?;
+        }
+        seq.end()
     }
 }
 
@@ -192,7 +191,7 @@ mod test {
     use std::ops::Deref;
 
     use serde_json::Value;
-    use yacme_protocol::jose::Nonce;
+    use yacme_protocol::{fmt::AcmeFormat, jose::Nonce};
 
     use super::*;
 
@@ -234,6 +233,7 @@ mod test {
         let token = UnsignedToken::post(header, &payload);
         let signed_token = token.sign(key.deref()).unwrap();
 
+        eprintln!("{}", signed_token.formatted());
         let serialized = serde_json::to_value(signed_token).unwrap();
         let expected = serde_json::from_str::<Value>(crate::example!("new-account.json")).unwrap();
 

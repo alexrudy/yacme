@@ -106,6 +106,13 @@ impl Authorization {
             tokio::time::sleep(delay).await;
         }
 
+        if !self.schema().status.is_valid() {
+            return Err(AcmeError::AuthorizationError(format!(
+                "{:?}",
+                self.schema().status
+            )));
+        }
+
         Ok(())
     }
 }

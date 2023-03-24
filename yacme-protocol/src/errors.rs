@@ -52,6 +52,9 @@ pub enum AcmeError {
 
     #[error("{0} is not a known challenge type")]
     UnknownChallenge(String),
+
+    #[error("Authorization status {0}, expected Valid")]
+    AuthorizationError(String),
 }
 
 impl AcmeError {
