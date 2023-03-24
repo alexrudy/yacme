@@ -40,8 +40,8 @@ ouroboros = { version = "^0.15.6" }
 mime = "0.3.16"
 
 
-yacme-service = { path = "yacme-service/" }
-yacme-key = { path = "yacme-key/" }
-yacme-protocol = { path = "yacme-protocol/" }
-yacme-schema = { path = "yacme-schema/" }
-yacme-test = { path = "yacme-test/" }
+yacme-service = { path = "yacme-service/", version = "1.0.1" }
+yacme-key = { path = "yacme-key/", version = "1.0.1" }
+yacme-protocol = { path = "yacme-protocol/", version = "1.0.1" }
+yacme-schema = { path = "yacme-schema/", version = "1.0.1" }
+yacme-test = { path = "yacme-test/", version = "1.0.1" }
