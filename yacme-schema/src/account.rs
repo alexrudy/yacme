@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 use signature::digest::KeyInit;
 
@@ -74,8 +75,24 @@ impl ExternalAccountBindingRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Contacts(HashSet<Url>);
+
+impl Serialize for Contacts {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut data: Vec<_> = self.0.iter().collect();
+        data.sort_by_key(|url| url.as_str());
+
+        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+        for url in data {
+            seq.serialize_element(url)?;
+        }
+        seq.end()
+    }
+}
 
 impl Contacts {
     pub fn new() -> Self {
