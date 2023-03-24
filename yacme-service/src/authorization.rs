@@ -9,7 +9,9 @@ use arc_swap::Guard;
 use yacme_protocol::{AcmeError, Request, Response, Url};
 use yacme_schema::{
     authorizations::Authorization as AuthorizationSchema,
-    challenges::{Challenge as ChallengeSchema, ChallengeReadyRequest},
+    challenges::{
+        Challenge as ChallengeSchema, ChallengeReadyRequest, Dns01Challenge, Http01Challenge,
+    },
     Identifier,
 };
 
@@ -158,8 +160,19 @@ impl Challenge {
         self.auth.account()
     }
 
+    /// Return the inner schema object.
     pub fn schema(&self) -> Guard<Arc<ChallengeSchema>> {
         self.data.schema()
+    }
+
+    /// The inner HTTP-01 challenge, if this is a HTTP-01 challenge.
+    pub fn http01(&self) -> Option<Http01Challenge> {
+        self.schema().http01().cloned()
+    }
+
+    /// The inner DNS-01 challenge, if this is a DNS-01 challenge.
+    pub fn dns01(&self) -> Option<Dns01Challenge> {
+        self.schema().dns01().cloned()
     }
 
     /// Identifying URL for this authorization

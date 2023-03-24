@@ -3,8 +3,8 @@
 //! *Prerequisite*: Start the pebble server via docker-compose. It is defined in the
 //! pebble/ directory, or available at https://github.com/letsencrypt/pebble/
 //!
-//! This example does not handle the challenge for you, you have to provide that
-//! yourself.
+//! This example handles the challenge using pebble's challenge server. In the real world,
+//! you would have to implement this yourself.
 
 use std::io::{self, Read};
 use std::ops::Deref;
@@ -97,15 +97,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let chall = auth
             .challenge("http-01")
-            .ok_or("Pebble did not provide an http-01 challenge")?;
-
-        let schema = chall.schema();
-        let inner = match schema.deref().deref() {
-            Challenge::Http01(inner) => inner,
-            _ => panic!("wat? didn't we just check the challenge type?"),
-        };
-
-        http01_challenge_response(inner, &account.key()).await?;
+            .ok_or("No http01 challenge provided")?;
+        let inner = chall.http01().unwrap();
+        http01_challenge_response(&inner, &account.key()).await?;
 
         chall.ready().await?;
         auth.finalize().await?;

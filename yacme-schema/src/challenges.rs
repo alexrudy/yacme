@@ -22,6 +22,7 @@ struct ChallengeInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
+#[non_exhaustive]
 pub enum Challenge {
     #[serde(rename = "http-01")]
     Http01(Http01Challenge),
@@ -73,6 +74,22 @@ impl Challenge {
 
     pub fn error(&self) -> Option<&AcmeErrorDocument> {
         self.info().and_then(|i| i.error.as_ref())
+    }
+
+    /// Get the inner HTTP-01 challenge, if this is an HTTP-01 challenge.
+    pub fn http01(&self) -> Option<&Http01Challenge> {
+        match self {
+            Challenge::Http01(http) => Some(http),
+            _ => None,
+        }
+    }
+
+    /// Get the inner DNS-01 challenge, if this is an DNS-01 challenge.
+    pub fn dns01(&self) -> Option<&Dns01Challenge> {
+        match self {
+            Challenge::Dns01(dns) => Some(dns),
+            _ => None,
+        }
     }
 }
 

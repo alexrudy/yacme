@@ -8,4 +8,6 @@ This probably isn't good for production use, but it is based on the work of [Rus
 
 Yeah... this project is getting started!
 
-Check out [pebble.rs](./yacme-schema/examples/pebble.rs) for a brief starting point (against LetsEncrypt's [pebble](https://github.com/letsencrypt/pebble)), and stay tuned for even more.
+The main interface to this set of crates is in the [`yacme`](./yacme/) crate.
+
+Check out [letsencrypt-pebble.rs](./yacme-service/examples/letsencrypt-pebble.rs) for a brief starting point (against LetsEncrypt's [pebble](https://github.com/letsencrypt/pebble)), and stay tuned for even more.
