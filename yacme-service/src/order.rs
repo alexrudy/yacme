@@ -1,3 +1,7 @@
+//! # Certificate Orders
+//!
+//!
+
 use std::{collections::hash_map::Entry, ops::DerefMut, sync::Arc};
 
 use arc_swap::Guard;
@@ -24,6 +28,7 @@ pub(crate) struct OrderState {
     pub authorizations: Cache<Authorization, ()>,
 }
 
+/// Order for a certificate for a set of identifiers.
 #[derive(Debug, Clone)]
 pub struct Order {
     account: Account,
@@ -66,6 +71,8 @@ impl Order {
         &self.account
     }
 
+    /// The get URL for this order, for fetching and uniquely identifying
+    /// this order.
     pub fn url(&self) -> &Url {
         self.data.url()
     }
@@ -86,12 +93,14 @@ impl Order {
         self.certificate_key = Some(certificate_key);
     }
 
+    /// Refresh the order information from the ACME provider.
     pub async fn refresh(&self) -> Result<(), AcmeError> {
         self.data
             .refresh(self.client(), self.account().request_key())
             .await
     }
 
+    /// Fetch the authorizations for this order.
     pub async fn authorizations(&self) -> Result<Vec<Authorization>, AcmeError> {
         let client = self.client();
         let mut authorizations = Vec::new();

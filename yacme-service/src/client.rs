@@ -1,3 +1,5 @@
+//! Internal, Send and Sync client wrapper.
+
 use std::sync::Arc;
 
 use serde::Serialize;

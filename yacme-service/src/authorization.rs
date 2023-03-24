@@ -1,3 +1,8 @@
+//! # Authorization of identifiers, and the associated challenges
+//!
+//! Authorizations prove that the ACME account controls the identifier (e.g. domain name) in
+//! question, usually by asking the account to change some externally visible value.
+
 use std::sync::Arc;
 
 use arc_swap::Guard;
@@ -118,6 +123,10 @@ impl Cacheable<()> for Authorization {
     }
 }
 
+/// ACME Challenge
+///
+/// A challenge is one way to prove to the ACME service provider that
+/// this account controls the identifier (e.g. domain name) in question.
 #[derive(Debug, Clone)]
 pub struct Challenge {
     auth: Authorization,
@@ -169,7 +178,7 @@ impl Challenge {
         Ok(())
     }
 
-    /// Wait for this specific challenge to get finalized (i.e. all challenges have responses)
+    /// Wait for this specific challenge to get finalized.
     pub async fn finalize(&self) -> Result<(), AcmeError> {
         tracing::debug!("Polling authorization resource to check for status updates");
 

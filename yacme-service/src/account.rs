@@ -20,6 +20,9 @@ use crate::{
 
 type AccountState = Cache<Order, OrderState>;
 
+/// An account with an ACME provider
+///
+/// Accounts are identified by their signing key.
 #[derive(Debug, Clone)]
 pub struct Account {
     provider: Provider,
@@ -56,7 +59,10 @@ impl Account {
         self.data.refresh(self.client(), self.request_key()).await
     }
 
-    pub async fn update(&self) -> UpdateAccount {
+    /// Create an update request for an account.
+    ///
+    /// Update requests are built using the [`UpdateAccount`] builder.
+    pub fn update(&self) -> UpdateAccount {
         UpdateAccount::new(self.clone())
     }
 
@@ -98,11 +104,14 @@ impl Account {
         Ok(orders)
     }
 
+    /// Get the order cache.
     pub(crate) fn cache(&self) -> &Cache<Order, OrderState> {
         self.data.state()
     }
 }
 
+/// Manage a request for a new or existing ACME account
+/// from an ACME provider.
 pub struct AccountBuilder {
     contact: Contacts,
     terms_of_service_agreed: Option<bool>,
@@ -124,36 +133,50 @@ impl AccountBuilder {
         }
     }
 
+    /// Bind this ACME account to an external account with some identifier.
+    ///
+    /// This allows accounts created with an ACME provider via their website to be linked
+    /// to the automated accounts created during the ACME protocol.
     pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
         self.external_account_binding = Some(binding);
         self
     }
 
+    /// Tell the provider that the user has taken action to agree to the terms of service.
     pub fn agree_to_terms_of_service(mut self) -> Self {
         self.terms_of_service_agreed = Some(true);
         self
     }
 
+    /// Add a new contact url to the account.
     pub fn add_contact_url(mut self, url: Url) -> Self {
         self.contact.add_contact_url(url);
         self
     }
 
-    pub fn must_exist(mut self) -> Self {
-        self.only_return_existing = Some(true);
-        self
-    }
-
+    /// Add a contact email address to the account, which will be converted to a mailto: URL.
     pub fn add_contact_email(mut self, email: &str) -> Result<Self, url::ParseError> {
         self.contact.add_contact_email(email)?;
         Ok(self)
     }
 
+    /// Require that the account already exists.
+    pub fn must_exist(mut self) -> Self {
+        self.only_return_existing = Some(true);
+        self
+    }
+
+    /// Set the account signing key (note that this key must be different
+    /// from the certificate signing key).)
     pub fn key(mut self, key: Arc<SigningKey>) -> Self {
         self.key = Some(key);
         self
     }
 
+    /// Create a new account with the ACME provider.
+    ///
+    /// The request is sent as a [`CreateAccount`].
+    /// If [`AccountBuilder::must_exist`] is set, this method acts like [`AccountBuilder::get`].
     pub async fn create(self) -> Result<Account, AcmeError> {
         let url = self.provider.directory().new_account.clone();
         let key = self.key.ok_or(AcmeError::MissingKey("account"))?;
@@ -185,12 +208,16 @@ impl AccountBuilder {
         ))
     }
 
+    /// Get an existing account.
+    ///
+    /// Uses `only_return_existing`, overriding the value set by [`AccountBuilder::must_exist`].
     pub async fn get(mut self) -> Result<Account, AcmeError> {
         self.only_return_existing = Some(true);
         self.create().await
     }
 }
 
+/// Update the contacts associated with an account
 #[derive(Debug)]
 pub struct UpdateAccount {
     contact: Contacts,
@@ -205,10 +232,13 @@ impl UpdateAccount {
         }
     }
 
+    /// A mutable reference to the contacts associated with this account, which can be
+    /// edited before calling [`UpdateAccount::update`].
     pub fn contacts(&mut self) -> &mut Contacts {
         &mut self.contact
     }
 
+    /// Update account information with the ACME provider.
     pub async fn update(self) -> Result<(), AcmeError> {
         let url = self.account.url().clone();
         let key = self.account.key.clone();
