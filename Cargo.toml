@@ -39,7 +39,9 @@ digest = { version = "^0.10.6" }
 ouroboros = { version = "^0.15.6" }
 mime = "0.3.16"
 
+
+yacme-service = { path = "yacme-service/" }
 yacme-key = { path = "yacme-key/" }
 yacme-protocol = { path = "yacme-protocol/" }
 yacme-schema = { path = "yacme-schema/" }
-yacme-service = { path = "yacme-service/" }
+yacme-test = { path = "yacme-test/" }

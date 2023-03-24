@@ -22,6 +22,7 @@ yacme-schema.workspace = true
 [dev-dependencies]
 tracing-subscriber.workspace = true
 serde_json.workspace = true
+yacme-test.workspace = true
 
 [features]
 pebble = []
@@ -29,4 +30,10 @@ trace-requests = ["yacme-protocol/trace-requests"]
 
 [[example]]
 name = "pebble"
+path = "examples/letsencrypt-pebble.rs"
+required-features = ["pebble"]
+
+[[test]]
+name = "pebble-integration"
+path = "tests/pebble.rs"
 required-features = ["pebble"]

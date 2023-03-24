@@ -165,7 +165,7 @@ impl Dns01Challenge {
     }
 
     pub fn record(&self, domain: &str) -> String {
-        format!("_acme-challenge.{domain}")
+        format!("_acme-challenge.{domain}.")
     }
 
     pub fn digest(&self, account_key: &SigningKey) -> String {

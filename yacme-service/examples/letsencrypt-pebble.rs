@@ -124,6 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// This method is specific to pebble - you would set up your challenge respons in an appropriate fashion
 async fn http01_challenge_response(
     challenge: &Http01Challenge,
     key: &SigningKey,

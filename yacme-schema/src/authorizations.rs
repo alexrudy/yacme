@@ -72,6 +72,10 @@ impl AuthroizationStatus {
                 | AuthroizationStatus::Revoked
         )
     }
+
+    pub fn is_valid(&self) -> bool {
+        matches!(self, AuthroizationStatus::Valid)
+    }
 }
 
 #[cfg(test)]
