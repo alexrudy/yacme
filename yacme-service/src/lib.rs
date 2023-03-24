@@ -2,6 +2,8 @@
 //!
 //! Used for managing an acocunt and issuing certificates
 
+#![deny(unsafe_code)]
+
 use std::sync::Arc;
 
 use arc_swap::{ArcSwap, Guard};

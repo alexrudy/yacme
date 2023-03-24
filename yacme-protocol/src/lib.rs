@@ -1,4 +1,5 @@
 //! # ACME JWT implementation and ACME request types.
+#![deny(unsafe_code)]
 
 use std::ops::Deref;
 use std::str::FromStr;
@@ -6,6 +7,7 @@ use std::str::FromStr;
 mod base64;
 pub mod client;
 pub mod errors;
+#[allow(unsafe_code)]
 pub mod fmt;
 pub mod jose;
 pub mod request;

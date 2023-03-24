@@ -6,6 +6,8 @@
 //! the RustCrypto primatives, as they abstract over the actual algorithm in use without
 //! polluting the entire ACME interface with generics.
 
+#![deny(unsafe_code)]
+
 use std::fmt;
 
 pub mod cert;
