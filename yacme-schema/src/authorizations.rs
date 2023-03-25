@@ -1,3 +1,7 @@
+//! # Authorization for identifiers
+//!
+//!
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +23,7 @@ pub struct Authorization {
     pub identifier: Identifier,
 
     /// The status of this authorization
-    pub status: AuthroizationStatus,
+    pub status: AuthorizationStatus,
 
     /// The timestamp after which the serve will consider this authorization
     /// invalid
@@ -41,7 +45,7 @@ pub struct Authorization {
 /// Status of an individual ACME authorization for an [`Identifier`]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AuthroizationStatus {
+pub enum AuthorizationStatus {
     /// The ACME server is waiting on the client to attempt authorization
     Pending,
 
@@ -61,20 +65,22 @@ pub enum AuthroizationStatus {
     Revoked,
 }
 
-impl AuthroizationStatus {
+impl AuthorizationStatus {
+    /// Returns true if the authorization is in a final state.
     pub fn is_finished(&self) -> bool {
         matches!(
             self,
-            AuthroizationStatus::Valid
-                | AuthroizationStatus::Invalid
-                | AuthroizationStatus::Deactivated
-                | AuthroizationStatus::Expired
-                | AuthroizationStatus::Revoked
+            AuthorizationStatus::Valid
+                | AuthorizationStatus::Invalid
+                | AuthorizationStatus::Deactivated
+                | AuthorizationStatus::Expired
+                | AuthorizationStatus::Revoked
         )
     }
 
+    /// Checks if the state has become valid.
     pub fn is_valid(&self) -> bool {
-        matches!(self, AuthroizationStatus::Valid)
+        matches!(self, AuthorizationStatus::Valid)
     }
 }
 

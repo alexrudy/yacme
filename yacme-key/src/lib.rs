@@ -7,6 +7,7 @@
 //! polluting the entire ACME interface with generics.
 
 #![deny(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::fmt;
 
@@ -56,9 +57,12 @@ impl PublicKey {
         self.0.as_jwk()
     }
 
+    /// The pkcs8 algorithm identifier for this key.
     pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
         self.0.algorithm()
     }
+
+    /// The key, as raw bytes.
     pub fn as_bytes(&self) -> Vec<u8> {
         self.0.as_bytes()
     }
@@ -98,16 +102,18 @@ impl AsRef<[u8]> for PublicKey {
 /// Currently, only ECDSA P256 is supported.
 ///
 /// ```
-/// use yacme_key::SignatureKind;
-/// use yacme_key::EcdsaAlgorithm;
+/// # use yacme_key::SignatureKind;
+/// # use yacme_key::EcdsaAlgorithm;
 /// let algorithm = SignatureKind::Ecdsa(EcdsaAlgorithm::P256);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureKind {
+    /// ECDSA using a variety of potential curves
     Ecdsa(EcdsaAlgorithm),
 }
 
 impl SignatureKind {
+    /// Create a new, secure random signing key for this signature kind.
     pub fn random(&self) -> SigningKey {
         match self {
             SignatureKind::Ecdsa(ecdsa) => SigningKey(ecdsa.random().into()),
@@ -162,6 +168,7 @@ impl SigningKey {
         self.0.as_jwk()
     }
 
+    /// The pkcs8 algorithm identifier for this key.
     pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
         self.0.algorithm()
     }

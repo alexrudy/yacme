@@ -1,6 +1,7 @@
 //! The request and response data structures for interacting with an ACME server.
 
 #![deny(unsafe_code)]
+#![deny(missing_docs)]
 
 pub mod account;
 pub mod authorizations;

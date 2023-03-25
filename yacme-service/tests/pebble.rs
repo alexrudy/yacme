@@ -10,8 +10,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use yacme_key::SignatureKind;
-use yacme_schema::authorizations::AuthroizationStatus;
-use yacme_schema::challenges::Challenge;
+use yacme_schema::authorizations::AuthorizationStatus;
+use yacme_schema::challenges::{Challenge, ChallengeKind};
 use yacme_service::Provider;
 
 #[tokio::test]
@@ -61,12 +61,12 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Authorizing {:?} with HTTP01", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthroizationStatus::Pending) {
+        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
             continue;
         }
 
         let chall = auth
-            .challenge("http-01")
+            .challenge(&ChallengeKind::Http01)
             .ok_or("Pebble did not provide an http-01 challenge")?;
 
         let schema = chall.schema();
@@ -89,7 +89,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
 
     order.certificate_key(certificate_key);
-    let cert = order.finalize_and_donwload().await?;
+    let cert = order.finalize_and_download().await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
@@ -145,12 +145,12 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Authorizing {:?} with DNS01", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthroizationStatus::Pending) {
+        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
             continue;
         }
 
         let chall = auth
-            .challenge("dns-01")
+            .challenge(&ChallengeKind::Dns01)
             .ok_or("Pebble did not provide an dns-01 challenge")?;
 
         let schema = chall.schema();
@@ -176,7 +176,7 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
 
     order.certificate_key(certificate_key);
-    let cert = order.finalize_and_donwload().await?;
+    let cert = order.finalize_and_download().await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 

@@ -1,3 +1,9 @@
+//! # Certificate orders
+//!
+//! Each order corresponds to a single request for a certificate chain, but may
+//! include multiple identifiers.  The order is created by the client, and then validated
+//! using the authorizations and challenges.
+
 use chrono::{DateTime, Utc};
 use der::Decode;
 use der::Encode;
@@ -15,13 +21,18 @@ use yacme_protocol::Url;
 
 const PEM_DOCUMENT_BEGIN: &str = "-----BEGIN";
 
+/// The response from an ACME server when listing all orders known to the server for this account.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Orders {
+    /// The list of orders.
     pub orders: Vec<Url>,
+
+    /// The next page of orders, if any.
     #[serde(default)]
     pub next: Option<Url>,
 }
 
+/// An ACME order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Order {
@@ -37,66 +48,98 @@ pub struct Order {
 }
 
 impl Order {
+    /// The status of the order.
     pub fn status(&self) -> &OrderStatus {
         &self.status
     }
 
+    /// The time at which the order expires, and the provider will
+    /// no longer consider it valid.
     pub fn expires(&self) -> Option<DateTime<Utc>> {
         self.expires
     }
 
+    /// The identifiers which apply to this order.
     pub fn identifiers(&self) -> &[Identifier] {
         self.identifiers.as_ref()
     }
 
+    /// The configured start time for the certificate.
     pub fn not_before(&self) -> Option<DateTime<Utc>> {
         self.not_before
     }
 
+    /// The configured end time for the certificate.
     pub fn not_after(&self) -> Option<DateTime<Utc>> {
         self.not_after
     }
 
+    /// The error, if any, which occurred while processing the order.
     pub fn error(&self) -> Option<&AcmeErrorDocument> {
         self.error.as_ref()
     }
 
+    /// The urls pointing to the Authorization objects for this order.
     pub fn authorizations(&self) -> &[Url] {
         self.authorizations.as_ref()
     }
 
+    /// The URL used to finalize this order with a CSR.
     pub fn finalize(&self) -> &Url {
         &self.finalize
     }
 
+    /// The URL used to fetch this order's certificate chain.
     pub fn certificate(&self) -> Option<&Url> {
         self.certificate.as_ref()
     }
 }
 
+/// State of the order during processing.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OrderStatus {
+    /// Order is waiting for authorizations to be completed.
     Pending,
+    /// Order is ready for a certificate signing request.
     Ready,
+
+    /// ACME provider is processing the certificate signing request.
     Processing,
+
+    /// ACME provider has issued the certificate.
     Valid,
+
+    /// ACME provider has encountered an error while processing the order, and the entire
+    /// order is now considered invalid.
     Invalid,
 }
 
+/// A request to create a new order associated with an ACME account.
+///
+/// The associated account is specified by the key used to sign the JWT request.
 #[derive(Debug, Serialize, Default)]
 pub struct NewOrderRequest {
+    /// A list of identifiers to include in the order.
     pub identifiers: Vec<Identifier>,
+
+    /// Sets a time before which the issued certificate will not be valid.
     pub not_before: Option<DateTime<Utc>>,
+
+    /// Sets a time after which the issued certificate will not be valid.
     pub not_after: Option<DateTime<Utc>>,
 }
 
+/// The request sent to finalize an order, including the certificate signing request.
 #[derive(Debug, Clone, Serialize)]
 pub struct FinalizeOrder {
     csr: Base64Data<SignedCertificateRequest>,
 }
 
 impl FinalizeOrder {
+    /// Create a new finalize order request from an order and a certificate signing key.
+    ///
+    /// The signing key used here **must** not be the same key used to identify the ACME account.
     pub fn new(order: &Order, key: &SigningKey) -> Self {
         let mut csr = yacme_key::cert::CertificateSigningRequest::new();
 
@@ -115,6 +158,7 @@ impl From<SignedCertificateRequest> for FinalizeOrder {
     }
 }
 
+/// A chain of certificates, returned when an order is successful.
 #[self_referencing]
 pub struct CertificateChain {
     data: Vec<Vec<u8>>,
@@ -124,6 +168,7 @@ pub struct CertificateChain {
 }
 
 impl CertificateChain {
+    /// Create a list of PEM documents representing the certificate chain.
     pub fn to_pem_documents(&self) -> Result<Vec<String>, AcmeError> {
         let docs = self
             .borrow_chain()

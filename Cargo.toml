@@ -45,3 +45,4 @@ yacme-service = { path = "yacme-service/", version = "1.0.1" }
 yacme-key = { path = "yacme-key/", version = "1.0.1" }
 yacme-protocol = { path = "yacme-protocol/", version = "1.0.1" }
 yacme-schema = { path = "yacme-schema/", version = "1.0.1" }
+yacme = { path = "yacme/" }

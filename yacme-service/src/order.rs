@@ -1,6 +1,7 @@
 //! # Certificate Orders
 //!
-//!
+//! Each order is for a single certificate chain, but that certificate chain
+//! may cover multiple DNS identities.
 
 use std::{collections::hash_map::Entry, ops::DerefMut, sync::Arc};
 
@@ -77,8 +78,19 @@ impl Order {
         self.data.url()
     }
 
+    /// The order data, as defined by [`yacme_schema::orders::Order`].
+    ///
+    /// This is useful for accessing the underlying order fields.
     pub fn schema(&self) -> Guard<Arc<OrderSchema>> {
         self.data.schema()
+    }
+
+    /// Get the status of this order.
+    ///
+    /// This does not refresh the underlying order data. To wait for a particular
+    /// status, use [`Order::refresh`] along with this method.
+    pub fn status(&self) -> OrderStatus {
+        *self.data.schema().status()
     }
 
     /// Set the signing key for certifiactes generated with this order
@@ -134,6 +146,7 @@ impl Order {
         Ok(authorizations)
     }
 
+    /// Fetch a single authorization by identifier, refreshing that authorization on the way.
     pub async fn authorization(&self, id: &Identifier) -> Result<Option<Authorization>, AcmeError> {
         if let Some(authc) = self.data.state().authorizations.get(id) {
             authc
@@ -152,6 +165,11 @@ impl Order {
         }
     }
 
+    /// Submit a certificate signing request for this order.
+    ///
+    /// This does not download the certificate itself, see [`Order::download`] for that, or use the
+    /// combined [`Order::finalize_and_download`] method to submit the certificate signing request,
+    /// and asynchronously wait for the certificate to be ready for download.
     pub async fn finalize(&self) -> Result<(), AcmeError> {
         tracing::trace!("Creating CSR for finalization request");
         let Some(certificate_key) = self.certificate_key.as_ref() else { return Err(AcmeError::MissingKey("certificate")) };
@@ -214,6 +232,10 @@ impl Order {
         Ok(())
     }
 
+    /// Download the certificate for this order.
+    ///
+    /// In order for the certificate to be ready, you must have submitted a certificate signing request
+    /// (see [`Order::finalize`]), and the order must have finished processing, which
     pub async fn download(&self) -> Result<CertificateChain, AcmeError> {
         let order_info = self.data.schema();
         let Some(url) = order_info.certificate() else { return Err(AcmeError::NotReady("certificate")) };
@@ -224,7 +246,12 @@ impl Order {
         Ok(certificate.into_inner())
     }
 
-    pub async fn finalize_and_donwload(&self) -> Result<CertificateChain, AcmeError> {
+    /// Finalize the order, and download the certificate.
+    ///
+    /// This submits the certificate signing request, and then waits for the ACME
+    /// provider to indicate that the certifiacte is done processing before returning
+    /// the certificate chain.
+    pub async fn finalize_and_download(&self) -> Result<CertificateChain, AcmeError> {
         self.finalize().await?;
         self.poll_for_order_ready().await?;
         self.download().await
@@ -243,6 +270,9 @@ impl Cacheable<OrderState> for Order {
     }
 }
 
+/// Builder to create a new Certificate order.
+///
+/// To create an [`OrderBuilder`], use [`Account::order`].
 #[derive(Debug)]
 pub struct OrderBuilder {
     account: Account,
@@ -261,26 +291,39 @@ impl OrderBuilder {
         }
     }
 
+    /// Add an identifier to to this order.
+    ///
+    /// Currently, YACME only supports DNS identifiers.
     pub fn push(mut self, identifier: Identifier) -> Self {
         self.identifiers.push(identifier);
         self
     }
 
+    /// Add a DNS identifier to this order.
+    ///
+    /// Currently, YACME only supports DNS identifiers.
     pub fn dns<S: Into<String>>(mut self, identifier: S) -> Self {
         self.identifiers.push(Identifier::dns(identifier.into()));
         self
     }
 
+    /// Set the start time for the certificate.
+    ///
+    /// This certificate will be considered invalid before this timestamp.
     pub fn start(mut self, when: DateTime<Utc>) -> Self {
         self.not_before = Some(when);
         self
     }
 
+    /// Set the end time for this certificate.
+    ///
+    /// This certificate will be considered invalid after this timestamp.
     pub fn end(mut self, when: DateTime<Utc>) -> Self {
         self.not_after = Some(when);
         self
     }
 
+    /// Send the request to create an order, returning an [`Order`].
     pub async fn create(self) -> Result<Order, AcmeError> {
         let account = self.account.clone();
         let payload = NewOrderRequest {

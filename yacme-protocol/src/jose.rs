@@ -80,6 +80,9 @@ impl From<Url> for AccountKeyIdentifier {
 }
 
 impl AccountKeyIdentifier {
+    /// Get the underlying URL.
+    ///
+    /// ACME account keys are always supposed to be the GET resource URL for the account.
     pub fn to_url(&self) -> Url {
         self.0.deref().clone()
     }
@@ -370,8 +373,11 @@ where
 /// Error returned for issues signing a JWS token
 #[derive(Debug, Error)]
 pub enum SigningError {
+    /// An error occured in the cryptographic signature process.
     #[error("signature error")]
     Signing(#[from] signature::Error),
+
+    /// An error occured while trying to serialize the token as JSON.
     #[error("serialization error: {0}")]
     JsonSerialize(#[source] serde_json::Error),
 }
