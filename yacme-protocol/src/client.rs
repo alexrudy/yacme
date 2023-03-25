@@ -99,13 +99,25 @@ impl ClientBuilder {
 /// See [`crate::Request`] for more information on how to create a request.
 ///
 /// ```no_run
+/// # use std::sync::Arc;
 /// # use yacme_protocol::Client;
 /// # use yacme_protocol::Request;
+/// # use yacme_key::{SignatureKind, EcdsaAlgorithm};
+/// # use yacme_protocol::Response;
+/// #
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+///
+/// let key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
+///
 /// let mut client = Client::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
 ///
-/// let request = Request::get("https://acme.example.com/account/1");
-/// let response = client.execute(request).await?;
+/// let request = Request::get("https://acme.example.com/account/1".parse().unwrap(), key);
+/// // This would normally be an actual response payload type, and not serde_json::Value.
+/// let response: Response<serde_json::Value> = client.execute(request).await?;
+///
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Default)]
 pub struct Client {
