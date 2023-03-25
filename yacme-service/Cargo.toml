@@ -13,7 +13,6 @@ categories = ["asynchronous", "network-programming", "cryptography"]
 [dependencies]
 arc-swap.workspace = true
 chrono.workspace = true
-http.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 thiserror.workspace = true

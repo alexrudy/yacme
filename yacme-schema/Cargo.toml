@@ -13,7 +13,6 @@ categories = ["asynchronous", "network-programming", "cryptography"]
 [dependencies]
 base64ct.workspace = true
 chrono.workspace = true
-eyre.workspace = true
 http.workspace = true
 reqwest.workspace = true
 serde.workspace = true

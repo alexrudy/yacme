@@ -17,12 +17,10 @@ elliptic-curve.workspace = true
 ecdsa.workspace = true
 p256.workspace = true
 pkcs8.workspace = true
-rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 x509-cert.workspace = true
 const-oid = { version = "0.9.1", features = ["db"] }
 pem-rfc7468.workspace = true
-digest.workspace = true
 der.workspace = true
