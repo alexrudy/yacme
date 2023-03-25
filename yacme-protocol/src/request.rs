@@ -60,6 +60,7 @@ const CONTENT_JOSE: &str = "application/jose+json";
 /// implement this to provide a custom representation when showing an ACME
 /// response.
 pub trait Encode {
+    /// Encode the value to a string suitable for an ACME request payload.
     fn encode(&self) -> Result<String, AcmeError>;
 }
 
@@ -194,9 +195,9 @@ impl From<(Arc<SigningKey>, AccountKeyIdentifier)> for Key {
 ///
 /// ```
 /// # use std::sync::Arc;
-/// use yacme_key::{SignatureKind, SigningKey, EcdsaAlgorithm};
-/// use yacme_protocol::{Url, Request};
-/// use yacme_protocol::fmt::AcmeFormat;
+/// # use yacme_key::{SignatureKind, SigningKey, EcdsaAlgorithm};
+/// # use yacme_protocol::{Url, Request};
+/// # use yacme_protocol::fmt::AcmeFormat;
 ///
 /// // ⚠️ **Do not use this key, it is an example used for testing only!**
 /// let private = "-----BEGIN PRIVATE KEY-----

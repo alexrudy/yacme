@@ -28,6 +28,7 @@ use crate::Url;
 /// so most types should implement or derive [`serde::Deserialize`]
 /// rather than implementing this type.
 pub trait Decode: Sized {
+    /// Decode an ACME response from a byte slice.
     fn decode(data: &[u8]) -> Result<Self, AcmeError>;
 }
 

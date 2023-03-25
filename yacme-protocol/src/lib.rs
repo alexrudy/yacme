@@ -1,5 +1,12 @@
 //! # ACME JWT implementation and ACME request types.
+//!
+//! Most ACME requests are authenticated as a JWT, signed by the
+//! account key. This module provides the implementation of that
+//! protocol, and the deserialization of the corresponding responses,
+//! as well as providing a [`Client`] type which can be used to
+//! track the correct Nonce through a series of requests.
 #![deny(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::ops::Deref;
 use std::str::FromStr;
@@ -24,23 +31,29 @@ pub use request::Request;
 pub use response::Response;
 use serde::{Deserialize, Serialize};
 
+/// A result type which uses [`AcmeError`] as the error type.
 pub type Result<T> = ::std::result::Result<T, AcmeError>;
 
 /// Universal Resource Locator which provides
 /// a [`std::fmt::Debug`] implementation which prints the
 /// full URL (rather than the parsed parts) for compactness.
+///
+/// This tries to be a drop-in replacement for [`url::Url`].
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct Url(url::Url);
 
 impl Url {
+    /// Underlying string representation of the URL.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
+    /// Just the path component of the URL.
     pub fn path(&self) -> &str {
         self.0.path()
     }
 
+    /// Just the host component of the URL.
     pub fn host(&self) -> Option<&str> {
         self.0.host_str()
     }

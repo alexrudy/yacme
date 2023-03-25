@@ -1,17 +1,25 @@
+//! # Identifiers
+//!
+//! Identifiers are used to identify the subject of a certificate. Only DNS identifiers are supported
+//! by YACME.
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use yacme_key::cert::RequestedSubjectName;
 
+/// An identifier for a certificate subject.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Identifier {
+    /// DNS identifiers for a certificate subject.
     Dns {
-        //TODO: Strongly type hostname with cortex-url
+        /// The hostname being identified.
         value: String,
     },
 }
 
 impl Identifier {
+    /// Create a new identifier for a DNS hostname.
     pub fn dns(hostname: String) -> Identifier {
         Self::Dns { value: hostname }
     }

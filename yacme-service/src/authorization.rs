@@ -10,13 +10,18 @@ use yacme_protocol::{AcmeError, Request, Response, Url};
 use yacme_schema::{
     authorizations::Authorization as AuthorizationSchema,
     challenges::{
-        Challenge as ChallengeSchema, ChallengeReadyRequest, Dns01Challenge, Http01Challenge,
+        Challenge as ChallengeSchema, ChallengeKind, ChallengeReadyRequest, Dns01Challenge,
+        Http01Challenge,
     },
     Identifier,
 };
 
 use crate::{account::Account, cache::Cacheable, client::Client, order::Order, Container};
 
+/// An Authorization is a proof that the account controls the identifier
+///
+/// Authorizations are attached to [`Order`]s, and contain a list of challenges that the account
+/// must complete in order to prove control of the identifier.
 #[derive(Debug, Clone)]
 pub struct Authorization {
     order: Order,
@@ -24,6 +29,13 @@ pub struct Authorization {
 }
 
 impl Authorization {
+    pub(crate) fn new(order: Order, info: AuthorizationSchema, url: Url) -> Self {
+        Self {
+            order,
+            data: Container::new(info, url),
+        }
+    }
+
     #[inline]
     pub(crate) fn client(&self) -> &Client {
         self.order.client()
@@ -34,6 +46,9 @@ impl Authorization {
         self.order.account()
     }
 
+    /// The underlying data returned from the ACME provider.
+    ///
+    /// See [`yacme_schema::authorizations::Authorization`] for details.
     pub fn schema(&self) -> Guard<Arc<AuthorizationSchema>> {
         self.data.schema()
     }
@@ -43,13 +58,18 @@ impl Authorization {
         self.data.url()
     }
 
+    /// The identifier for this authorization.
     pub fn identifier(&self) -> Identifier {
         self.data.schema().identifier.clone()
     }
 
-    pub fn challenge(&self, kind: &str) -> Option<Challenge> {
+    /// Get a challenge by challenge kind.
+    ///
+    /// Challenge kinds are supplied as a string, and are defined in the ACME spec.
+    /// This method supports `http-01` and `dns-01` challenges.
+    pub fn challenge(&self, kind: &ChallengeKind) -> Option<Challenge> {
         for chall in &self.schema().challenges {
-            if chall.name() == Some(kind) {
+            if chall.kind() == *kind {
                 let url = chall.url().unwrap();
                 return Some(Challenge::new(self.clone(), chall.clone(), url));
             }
@@ -67,13 +87,7 @@ impl Authorization {
         }
     }
 
-    pub(crate) fn new(order: Order, info: AuthorizationSchema, url: Url) -> Self {
-        Self {
-            order,
-            data: Container::new(info, url),
-        }
-    }
-
+    /// Refresh the authorization data from the ACME provider.
     pub async fn refresh(&self) -> Result<(), AcmeError> {
         self.data
             .refresh(self.client(), self.account().request_key())
@@ -143,7 +157,7 @@ pub struct Challenge {
 }
 
 impl Challenge {
-    pub fn new(auth: Authorization, schema: ChallengeSchema, url: Url) -> Self {
+    pub(crate) fn new(auth: Authorization, schema: ChallengeSchema, url: Url) -> Self {
         Self {
             auth,
             data: Container::new(schema, url),
@@ -225,11 +239,7 @@ impl Challenge {
 
             let chall = self
                 .auth
-                .challenge(
-                    self.schema()
-                        .name()
-                        .ok_or_else(|| AcmeError::MissingData("challenge"))?,
-                )
+                .challenge(&self.schema().kind())
                 .ok_or_else(|| AcmeError::MissingData("challenge"))?;
 
             tracing::trace!("Checking challenge {name}");

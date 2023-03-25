@@ -56,6 +56,7 @@ impl<'i, W> IndentWriter<'i, W> {
         }
     }
 
+    /// Get the string used to indent each level.
     pub fn indent_str(&self) -> &str {
         self.indent
     }
@@ -176,16 +177,22 @@ pub trait AcmeFormat {
     /// Write this format at the current indentation.
     fn fmt<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result;
 
+    /// Write this format at an indented level one greater than the current level.
+    ///
+    /// After this method completes, the indentation level is left unchanged.
     fn fmt_indented<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result {
         let mut f = f.indent();
         self.fmt(&mut f)
     }
 
+    /// Write this format at an indented level one greater than the current level,
+    /// but don't indent the first line.
     fn fmt_indented_skip_first<W: fmt::Write>(&self, f: &mut IndentWriter<'_, W>) -> fmt::Result {
         let mut f = f.indent_skip_first();
         self.fmt(&mut f)
     }
 
+    /// Return a formatting proxy which will use the ACME format when used with [`std::fmt::Display`].
     fn formatted(&self) -> AcmeFormatted<'_, Self> {
         AcmeFormatted(self)
     }

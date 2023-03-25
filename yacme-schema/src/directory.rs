@@ -1,3 +1,6 @@
+//! Directory provides all of the URLs required to configure an ACME client for use with a specific
+//! provider. It can be fetched as JSON from an advertised directory URL.
+
 use serde::{Deserialize, Serialize};
 use yacme_protocol::Url;
 
@@ -31,6 +34,7 @@ pub struct Directory {
     pub meta: Option<Metadata>,
 }
 
+/// Additional metadata provided along with the directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {

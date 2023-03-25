@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use yacme_key::{SignatureKind, SigningKey};
-use yacme_schema::authorizations::AuthroizationStatus;
-use yacme_schema::challenges::{Challenge, Http01Challenge};
+use yacme_schema::authorizations::AuthorizationStatus;
+use yacme_schema::challenges::{ChallengeKind, Http01Challenge};
 use yacme_service::Provider;
 
 fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
@@ -91,12 +91,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Authorizing {:?}", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthroizationStatus::Pending) {
+        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
             continue;
         }
 
         let chall = auth
-            .challenge("http-01")
+            .challenge(&ChallengeKind::Http01)
             .ok_or("No http01 challenge provided")?;
         let inner = chall.http01().unwrap();
         http01_challenge_response(&inner, &account.key()).await?;
@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
 
     order.certificate_key(key);
-    let cert = order.finalize_and_donwload().await?;
+    let cert = order.finalize_and_download().await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 

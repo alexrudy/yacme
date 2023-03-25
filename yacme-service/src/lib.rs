@@ -1,8 +1,18 @@
 //! A high-level implementation of an ACME client
 //!
-//! Used for managing an acocunt and issuing certificates
+//! Used for managing an acocunt and issuing certificates. The usual flow
+//! for a client is:
+//!
+//! 1. Create a [`Provider`].
+//! 2. Get or create an [`Account`].
+//! 3. Create an [`Order`].
+//! 4. For each identity, complete a [`Challenge`] attached to an [`Authorization`]
+//!    on that order. Only one challenge per authorization is required.
+//! 5. Finalize the order, submitting a certificate signing request, using [`Order::finalize`].
+//! 6. Download the certificate with [`Order::download`].
 
 #![deny(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::sync::Arc;
 
@@ -21,6 +31,11 @@ pub mod authorization;
 pub(crate) mod cache;
 mod client;
 pub mod order;
+
+pub use crate::account::Account;
+pub use crate::authorization::Authorization;
+pub use crate::authorization::Challenge;
+pub use crate::order::Order;
 
 use crate::client::Client;
 
@@ -165,6 +180,9 @@ impl Provider {
         &self.client
     }
 
+    /// Get a builder for a new provider.
+    ///
+    /// See [`ProviderBuilder`] for more information.
     pub fn build() -> ProviderBuilder {
         ProviderBuilder::new()
     }
@@ -174,10 +192,15 @@ impl Provider {
 /// or building the HTTP client used to power the provider.
 #[derive(Debug, Error)]
 pub enum BuilderError {
+    /// An error occured while building the underlying HTTP client.
     #[error("Building HTTPS client: {0}")]
     Client(#[source] reqwest::Error),
+
+    /// No directory URL was specified, and the directory was not specified..
     #[error("Missing provider URL")]
     Url,
+
+    /// An error occured while fetching the provider directory.
     #[error("Fetching provider directory: {0}")]
     Directory(#[source] AcmeError),
 }
@@ -272,6 +295,10 @@ impl ProviderBuilder {
 /// Included ACME provider information.
 pub mod provider {
 
+    /// The ACME directory for a local pebble deployment
     #[cfg(feature = "pebble")]
     pub const PEBBLE: &str = "https://localhost:14000/dir";
+
+    /// The ACME directory URL for Let's Encrypt.
+    pub const LETSENCRYPT: &str = "https://acme-v02.api.letsencrypt.org/directory";
 }
