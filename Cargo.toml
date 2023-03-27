@@ -41,8 +41,4 @@ mime = "0.3.17"
 
 
 yacme-test = { path = "yacme-test/" }
-yacme-service = { path = "yacme-service/", version = "1.1.0" }
-yacme-key = { path = "yacme-key/", version = "1.1.0" }
-yacme-protocol = { path = "yacme-protocol/", version = "1.1.0" }
-yacme-schema = { path = "yacme-schema/", version = "1.1.0" }
 yacme = { path = "yacme/" }
