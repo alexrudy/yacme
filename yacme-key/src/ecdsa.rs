@@ -43,6 +43,14 @@ impl signature::Signer<Signature> for EcdsaSigningKey {
     }
 }
 
+impl pkcs8::EncodePrivateKey for EcdsaSigningKey {
+    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
+        match self {
+            EcdsaSigningKey::P256(key) => key.to_pkcs8_der(),
+        }
+    }
+}
+
 impl crate::SigningKeyAlgorithm for EcdsaSigningKey {
     fn as_jwk(&self) -> crate::jwk::Jwk {
         match self {
@@ -75,6 +83,12 @@ impl crate::SigningKeyAlgorithm for EcdsaSigningKey {
                 oid: const_oid::db::rfc5912::ECDSA_WITH_SHA_256,
                 parameters: None,
             },
+        }
+    }
+
+    fn kind(&self) -> crate::SignatureKind {
+        match self {
+            EcdsaSigningKey::P256(_) => crate::SignatureKind::Ecdsa(crate::EcdsaAlgorithm::P256),
         }
     }
 }

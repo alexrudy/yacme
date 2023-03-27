@@ -153,6 +153,13 @@ impl SigningKey {
             )))),
         }
     }
+
+    /// Return the signature kind, used to recover the key type from a PEM file.
+    pub fn kind(&self) -> SignatureKind {
+        match &self.0 {
+            InnerSigningKey::Ecdsa(key) => key.kind(),
+        }
+    }
 }
 
 impl SigningKey {
@@ -171,6 +178,12 @@ impl SigningKey {
     /// The pkcs8 algorithm identifier for this key.
     pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
         self.0.algorithm()
+    }
+}
+
+impl pkcs8::EncodePrivateKey for SigningKey {
+    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
+        self.0.to_pkcs8_der()
     }
 }
 
@@ -225,6 +238,14 @@ impl PartialEq for InnerSigningKey {
 
 impl Eq for InnerSigningKey {}
 
+impl pkcs8::EncodePrivateKey for InnerSigningKey {
+    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
+        match self {
+            InnerSigningKey::Ecdsa(key) => key.to_pkcs8_der(),
+        }
+    }
+}
+
 impl signature::Signer<Signature> for InnerSigningKey {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, ::ecdsa::Error> {
         match self {
@@ -249,11 +270,14 @@ impl fmt::Debug for InnerSigningKey {
     }
 }
 
-pub(crate) trait SigningKeyAlgorithm: signature::Signer<Signature> {
+pub(crate) trait SigningKeyAlgorithm:
+    signature::Signer<Signature> + pkcs8::EncodePrivateKey
+{
     fn as_jwk(&self) -> crate::jwk::Jwk;
     fn public_key(&self) -> PublicKey;
     fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error>;
     fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
+    fn kind(&self) -> SignatureKind;
 }
 
 pub(crate) trait PublicKeyAlgorithm {
@@ -265,6 +289,9 @@ pub(crate) trait PublicKeyAlgorithm {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+
+    use base64ct::LineEnding;
+    use pkcs8::EncodePrivateKey;
 
     #[macro_export]
     macro_rules! key {
@@ -286,5 +313,14 @@ mod test {
         .unwrap();
 
         Arc::new(key)
+    }
+
+    #[test]
+    fn roundtrip_key_through_pkcs8() {
+        let key = key!("ec-p255");
+        let pkcs8 = key.to_pkcs8_pem(LineEnding::default()).unwrap();
+        let key2 = crate::SigningKey::from_pkcs8_pem(&pkcs8, key.kind()).unwrap();
+
+        assert_eq!(key.as_ref(), &key2);
     }
 }
