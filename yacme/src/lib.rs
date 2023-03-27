@@ -21,11 +21,7 @@
 //! - `protocol` provides the JWT protocol used by ACME servers.
 //! - `key` provides support for ECDSA keys.
 
-#[doc(inline)]
-pub use yacme_key as key;
-#[doc(inline)]
-pub use yacme_protocol as protocol;
-#[doc(inline)]
-pub use yacme_schema as schema;
-#[doc(inline)]
-pub use yacme_service as service;
+pub mod key;
+pub mod protocol;
+pub mod schema;
+pub mod service;

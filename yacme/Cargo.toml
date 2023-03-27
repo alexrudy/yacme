@@ -10,7 +10,48 @@ categories = ["asynchronous", "network-programming", "cryptography"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-yacme-service.workspace = true
-yacme-schema.workspace = true
-yacme-protocol.workspace = true
-yacme-key.workspace = true
+base64ct.workspace = true
+signature.workspace = true
+elliptic-curve.workspace = true
+ecdsa.workspace = true
+p256.workspace = true
+pkcs8.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+http.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+sha2.workspace = true
+x509-cert.workspace = true
+const-oid = { version = "0.9.2", features = ["db"] }
+pem-rfc7468.workspace = true
+der.workspace = true
+thiserror.workspace = true
+eyre.workspace = true
+url.workspace = true
+chrono.workspace = true
+mime.workspace = true
+hmac.workspace = true
+ouroboros.workspace = true
+arc-swap.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+yacme-test.workspace = true
+tokio = { workspace = true, features = ["macros"] }
+
+[[example]]
+name = "pebble"
+path = "examples/letsencrypt-pebble.rs"
+required-features = ["pebble"]
+
+[features]
+pebble = []
+trace-requests = []
+
+[[test]]
+name = "pebble-integration"
+path = "tests/pebble.rs"
+required-features = ["pebble"]

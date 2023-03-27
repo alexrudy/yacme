@@ -21,7 +21,7 @@ let provider = yacme::service::Provider::build().
         .build()
         .await?;
 
-let account_key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
+let account_key = Arc::new(SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256).random());
 // Fetch an existing account
 let account = provider.account().key(account_key).must_exist().get().await?;
 
@@ -46,7 +46,7 @@ chall.ready().await?;
 auth.finalize().await?;
 
 // Set a certifiacte key
-let cert_key = Arc::new(SignatureKind::Ecdsa(yacme_key::EcdsaAlgorithm::P256).random());
+let cert_key = Arc::new(SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256).random());
 
 // Attach the certificate key to the order
 order.certificate_key(key);
