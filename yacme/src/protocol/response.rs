@@ -1,9 +1,9 @@
 //! HTTP responses which adhere to RFC 8885
 //!
 //! [RFC 8885][] does not constrain HTTP responses from the ACME service
-//! strongly, except that they should contain a [nonce][crate::jose::Nonce].
+//! strongly, except that they should contain a [nonce][super::jose::Nonce].
 //!
-//! The response type here also implements [`crate::fmt::AcmeFormat`] so that
+//! The response type here also implements [`super::fmt::AcmeFormat`] so that
 //! it can be displayed in a form similar to those in [RFC 8885][] while
 //! debugging.
 //!
@@ -107,7 +107,7 @@ impl<T> Response<T> {
 
     /// Get the [`Nonce`] from this response.
     ///
-    /// Normally, this is unnecessay, as [`crate::Client`] will automatically handle
+    /// Normally, this is unnecessay, as [`super::Client`] will automatically handle
     /// and track [`Nonce`] values.
     pub fn nonce(&self) -> Option<Nonce> {
         super::client::extract_nonce(&self.headers).ok()

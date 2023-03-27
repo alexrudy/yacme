@@ -5,7 +5,7 @@
 //! JWS token using the flattened JSON format.
 //!
 //! This format is particular to ACME/[RFC 8885][] and so is implemented
-//! here (along with [crate::jose] which implements the JWS portion).
+//! here (along with [super::jose] which implements the JWS portion).
 //!
 //! For example, a request to create a new account might look like:
 //! ```text
@@ -51,7 +51,7 @@ const CONTENT_JOSE: &str = "application/jose+json";
 /// in some fashion.
 ///
 /// This is only useful when formatting the response in the ACME-style HTTP
-/// format, as used by [`crate::fmt::AcmeFormat`].
+/// format, as used by [`super::fmt::AcmeFormat`].
 ///
 /// There is a blanket implementation provided for any type which implements
 /// [`serde::Serialize`], as we assume that serializable values would be sent
@@ -183,7 +183,7 @@ impl From<(Arc<SigningKey>, AccountKeyIdentifier)> for Key {
 /// ACME prescribes that all requests are POST JWS requests in the flattened
 /// JSON format. This structure contains all of the materials *except* the
 /// anti-replay [nonce][Nonce] which are required to create an appropriate HTTP
-/// request. The [nonce][Nonce] is left out of this object that if the [`crate::Client`]
+/// request. The [nonce][Nonce] is left out of this object that if the [`super::Client`]
 /// encounters a bad [nonce][Nonce], it can re-try the same request with a new [nonce][Nonce]
 /// value without having to re-build the request object.
 ///
@@ -290,8 +290,8 @@ where
     /// Sign and finalize this request so that it can be sent over HTTP.
     ///
     /// The resulting [`SignedRequest`] can be converted to a [`reqwest::Request`]
-    /// for transmission. Normally, this method is not necessary - the [`yacme::protocol::Client`]
-    /// provides [`yacme::protocol::Client::execute`] for executing [`Request`] objects natively.
+    /// for transmission. Normally, this method is not necessary - the [`crate::protocol::Client`]
+    /// provides [`crate::protocol::Client::execute`] for executing [`Request`] objects natively.
     pub fn sign(&self, nonce: Nonce) -> Result<SignedRequest, AcmeError> {
         let signed_token = self.signed_token(nonce)?;
         let mut request = reqwest::Request::new(http::Method::POST, self.url.clone().into());
