@@ -19,6 +19,10 @@ use crate::ecdsa::EcdsaSigningKey;
 
 pub use crate::ecdsa::EcdsaAlgorithm;
 
+pub use p256;
+pub use pkcs8;
+pub use signature;
+
 /// A signature, produced by signing a key over a message.
 ///
 /// Interally, just bytes which must be encoded in some fashion
