@@ -3,8 +3,8 @@ members = ["yacme", "yacme-*"]
 
 [workspace.dependencies]
 arc-swap = "1.6.0"
-base64ct = { version = "^1.5.3", features = ["alloc"] }
-chrono = { version = "0.4.23", features = ["serde"] }
+base64ct = { version = "^1.6.0", features = ["alloc"] }
+chrono = { version = "0.4.24", features = ["serde"] }
 eyre = "0.6.8"
 http = "0.2.9"
 rand = { version = "0.8.5", features = ["getrandom"] }
@@ -12,10 +12,10 @@ reqwest = { version = "^0.11", features = [
     "rustls-tls",
     "json",
 ], default-features = false }
-serde = { version = "^1.0.152", features = ["derive"] }
-serde_json = "^1.0.93"
+serde = { version = "^1.0.158", features = ["derive"] }
+serde_json = "^1.0.94"
 signature = "^2.0.0"
-thiserror = "^1.0.38"
+thiserror = "^1.0.40"
 tracing = { version = "0.1.37", features = ["async-await"] }
 url = { version = "2.3.1", features = ["serde"] }
 der = { version = "0.6.1", features = ["std", "pem", "oid", "derive"] }
@@ -25,24 +25,24 @@ elliptic-curve = { version = "^0.12.3", features = [
     "arithmetic",
     "sec1",
 ] }
-ecdsa = { version = "^0.15.0", features = ["std", "pkcs8", "pem"] }
-rsa = "^0.8.1"
+ecdsa = { version = "^0.15.1", features = ["std", "pkcs8", "pem"] }
+rsa = "^0.8.2"
 p256 = { version = "^0.12.0", features = ["pkcs8", "arithmetic", "jwk"] }
-pkcs8 = { version = "^0.9.0", features = ["alloc"] }
+pkcs8 = { version = "^0.9.0", features = ["alloc", "pem"] }
 hmac = "^0.12.1"
 sha2 = "^0.10.6"
 pem-rfc7468 = { version = "^0.6.0", features = ["std"] }
-tokio = { version = "^1.25", features = ["full"] }
+tokio = { version = "^1.26", features = ["full"] }
 tracing-subscriber.version = "^0.3"
 x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
 digest = { version = "^0.10.6" }
 ouroboros = { version = "^0.15.6" }
-mime = "0.3.16"
+mime = "0.3.17"
 
 
 yacme-test = { path = "yacme-test/" }
-yacme-service = { path = "yacme-service/", version = "1.0.1" }
-yacme-key = { path = "yacme-key/", version = "1.0.1" }
-yacme-protocol = { path = "yacme-protocol/", version = "1.0.1" }
-yacme-schema = { path = "yacme-schema/", version = "1.0.1" }
+yacme-service = { path = "yacme-service/", version = "1.1.0" }
+yacme-key = { path = "yacme-key/", version = "1.1.0" }
+yacme-protocol = { path = "yacme-protocol/", version = "1.1.0" }
+yacme-schema = { path = "yacme-schema/", version = "1.1.0" }
 yacme = { path = "yacme/" }
