@@ -30,6 +30,43 @@ where
     }
 }
 
+struct Base64Visitor<T>(PhantomData<T>);
+
+impl<'de, T> de::Visitor<'de> for Base64Visitor<T>
+where
+    T: for<'a> TryFrom<&'a [u8]>,
+{
+    type Value = Base64Data<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> fmt::Result {
+        formatter.write_str("base64url encoded data")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let data = base64ct::Base64UrlUnpadded::decode_vec(v)
+            .map_err(|_| E::invalid_value(de::Unexpected::Str(v), &"invalid base64url encoding"))?;
+
+        let realized = T::try_from(data.as_ref())
+            .map_err(|_| E::invalid_value(de::Unexpected::Str(v), &"can't parse internal data"))?;
+        Ok(Base64Data(realized))
+    }
+}
+
+impl<'de, T> de::Deserialize<'de> for Base64Data<T>
+where
+    T: for<'a> TryFrom<&'a [u8]>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(Base64Visitor(PhantomData))
+    }
+}
+
 impl<T> fmt::AcmeFormat for Base64Data<T>
 where
     T: AsRef<[u8]>,
@@ -84,7 +121,7 @@ where
     type Value = Base64JSON<T>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a base64url encoded type")
+        formatter.write_str("a base64url encoded json document")
     }
 
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
