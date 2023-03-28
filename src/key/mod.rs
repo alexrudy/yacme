@@ -51,7 +51,7 @@ impl From<Vec<u8>> for Signature {
 pub struct SigningError;
 
 /// The public half of a signing key
-pub struct PublicKey(Box<dyn PublicKeyAlgorithm>);
+pub struct PublicKey(Box<dyn PublicKeyAlgorithm + Send + Sync>);
 
 impl PublicKey {
     /// A JSON web key type suitable for use in a JWS header
@@ -82,7 +82,7 @@ impl Eq for PublicKey {}
 
 impl<T> From<Box<T>> for PublicKey
 where
-    T: PublicKeyAlgorithm + 'static,
+    T: PublicKeyAlgorithm + Send + Sync + 'static,
 {
     fn from(value: Box<T>) -> Self {
         PublicKey(value as _)
@@ -204,7 +204,7 @@ impl signature::DigestSigner<sha2::Sha256, Signature> for SigningKey {
 }
 
 pub(crate) enum InnerSigningKey {
-    Ecdsa(Box<dyn SigningKeyAlgorithm>),
+    Ecdsa(Box<dyn SigningKeyAlgorithm + Send + Sync>),
     //TODO: Consider supporting other algorithms?
 }
 
@@ -326,4 +326,8 @@ pub(crate) mod test {
 
         assert_eq!(key.as_ref(), &key2);
     }
+
+    static_assertions::assert_impl_all!(super::Signature: Send, Sync);
+    static_assertions::assert_impl_all!(super::SigningKey: Send, Sync);
+    static_assertions::assert_impl_all!(super::PublicKey: Send, Sync);
 }
