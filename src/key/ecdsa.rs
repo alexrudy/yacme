@@ -2,6 +2,7 @@
 
 use const_oid::AssociatedOid;
 use elliptic_curve::sec1::ToEncodedPoint;
+use pkcs8::EncodePrivateKey;
 use signature::rand_core::OsRng;
 
 use super::{PublicKeyAlgorithm, Signature};
@@ -39,14 +40,6 @@ impl signature::Signer<Signature> for EcdsaSigningKey {
                 let bytes = signature.to_vec();
                 Ok(Signature(bytes))
             }
-        }
-    }
-}
-
-impl pkcs8::EncodePrivateKey for EcdsaSigningKey {
-    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
-        match self {
-            EcdsaSigningKey::P256(key) => key.to_pkcs8_der(),
         }
     }
 }
@@ -89,6 +82,12 @@ impl super::SigningKeyAlgorithm for EcdsaSigningKey {
     fn kind(&self) -> super::SignatureKind {
         match self {
             EcdsaSigningKey::P256(_) => super::SignatureKind::Ecdsa(super::EcdsaAlgorithm::P256),
+        }
+    }
+
+    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
+        match self {
+            EcdsaSigningKey::P256(key) => key.to_pkcs8_der(),
         }
     }
 }

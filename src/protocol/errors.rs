@@ -53,7 +53,7 @@ pub enum AcmeError {
 
     /// The signing algorithm encountered an error.
     #[error("An error occured while signing the JWS token: {0}")]
-    Signing(#[source] eyre::Report),
+    Signing(#[source] signature::Error),
 
     /// Some data was missing from an input.
     #[error("Required configuration data is missing: {0}")]

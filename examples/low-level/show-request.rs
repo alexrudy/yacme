@@ -2,13 +2,13 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::protocol::fmt::AcmeFormat;
-use crate::protocol::{Client, Request};
-use crate::schema::account::{Contacts, CreateAccount};
-use crate::schema::directory::Directory;
-use crate::schema::Account;
 use reqwest::Certificate;
 use reqwest::Url;
+use yacme::protocol::fmt::AcmeFormat;
+use yacme::protocol::{Client, Request};
+use yacme::schema::account::{Contacts, CreateAccount};
+use yacme::schema::directory::Directory;
+use yacme::schema::Account;
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 
@@ -26,12 +26,12 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<crate::key::SigningKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKey> {
     let raw = read_string(path)?;
 
-    let key = crate::key::SigningKey::from_pkcs8_pem(
+    let key = yacme::key::SigningKey::from_pkcs8_pem(
         &raw,
-        crate::key::SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256),
+        yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
     )
     .unwrap();
 
