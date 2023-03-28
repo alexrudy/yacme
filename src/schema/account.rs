@@ -7,86 +7,159 @@
 use std::collections::HashSet;
 
 use serde::{ser, Deserialize, Serialize};
-use signature::digest::KeyInit;
 
-use crate::key::jwk::Jwk;
-use crate::key::PublicKey;
-use crate::key::Signature;
-
-use crate::protocol::jose::ProtectedHeader;
-use crate::protocol::jose::SignatureAlgorithm;
-use crate::protocol::jose::SignedToken;
-use crate::protocol::jose::UnsignedToken;
 use crate::protocol::Url;
 
-/// Account key for externally binding accounts, provided by the ACME
-/// provider.
-#[derive(Debug)]
-pub struct Key(Vec<u8>);
+pub mod external {
+    //! External account binding to connect provider accounts to ACME accounts.
 
-impl AsRef<[u8]> for Key {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
+    use serde::{Deserialize, Serialize};
+    use signature::digest::KeyInit;
+
+    use crate::key::jwk::Jwk;
+    use crate::key::PublicKey;
+    use crate::key::Signature;
+
+    use crate::protocol::jose::ProtectedHeader;
+    use crate::protocol::jose::SignatureAlgorithm;
+    use crate::protocol::jose::SignedToken;
+    use crate::protocol::jose::UnsignedToken;
+    use crate::protocol::Base64Data;
+    use crate::protocol::Url;
+
+    /// Account key for externally binding accounts, provided by the ACME
+    /// provider.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(from = "Base64Data<Key>", into = "Base64Data<Key>")]
+    pub struct Key(Vec<u8>);
+
+    impl AsRef<[u8]> for Key {
+        fn as_ref(&self) -> &[u8] {
+            self.0.as_slice()
+        }
+    }
+
+    impl From<Base64Data<Key>> for Key {
+        fn from(value: Base64Data<Key>) -> Self {
+            value.0
+        }
+    }
+
+    impl TryFrom<&[u8]> for Key {
+        type Error = ();
+
+        fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+            Ok(Key(value.into()))
+        }
+    }
+
+    /// Identifier provided by an ACME service provider.
+    ///
+    /// which is used to bind this account to an account created elsewhere
+    /// (e.g. on the provider's website).
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct ExternalAccountId(String);
+
+    impl From<String> for ExternalAccountId {
+        fn from(value: String) -> Self {
+            ExternalAccountId(value)
+        }
+    }
+
+    impl From<&str> for ExternalAccountId {
+        fn from(value: &str) -> Self {
+            ExternalAccountId(value.into())
+        }
+    }
+
+    /// The token used to bind an external account based on a Key from
+    /// the provider.
+    #[derive(Debug, Serialize)]
+    pub struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
+
+    // Create alias for HMAC-SHA256
+    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+
+    /// Information for externally binding accounts, provided by the ACME provider.
+    ///
+    /// This is the raw form - the fields and data provided by the ACME provider.
+    /// To use this to authenticate and bind an account, you have to send a signed
+    /// JWT token to the ACME provider. See [`ExternalAccountBindingRequest::token`]
+    /// which can create that signed JWT.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct ExternalAccountBindingRequest {
+        /// The idnetifier provided by the ACME provider for the external account.
+        pub id: ExternalAccountId,
+        /// The key provided by the ACME provider used to sign the binding request.
+        pub key: Key,
+    }
+
+    impl ExternalAccountBindingRequest {
+        /// Create new external account binding request.
+        pub fn new(id: ExternalAccountId, key: Key) -> Self {
+            Self { id, key }
+        }
+
+        /// Create a JWT token signed in a way to bind to the key associated with an ACME
+        /// account.
+        pub fn token(&self, public_key: &PublicKey, url: Url) -> ExternalAccountToken {
+            let token = UnsignedToken::post(
+                ProtectedHeader::new(
+                    SignatureAlgorithm::HS256,
+                    Some(self.id.clone()),
+                    None,
+                    url,
+                    None,
+                ),
+                public_key.to_jwk(),
+            );
+
+            let mac = HmacSha256::new_from_slice(self.key.as_ref())
+                .expect("HMAC can take key of any size");
+
+            ExternalAccountToken(token.digest(mac).unwrap())
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use std::str::FromStr;
+
+        use super::*;
+
+        #[test]
+        fn serde_external_account_binding() {
+            let key = Key::try_from(&b"12345678901234567890123456789012"[..]).unwrap();
+            let id = ExternalAccountId::from("12345678901234567890123456789012");
+            let request = ExternalAccountBindingRequest { id, key };
+            let serialized = serde_json::to_string(&request).unwrap();
+            let deserialized: ExternalAccountBindingRequest =
+                serde_json::from_str(&serialized).unwrap();
+            assert_eq!(request, deserialized);
+        }
+
+        #[test]
+        fn external_account_token() {
+            let key = Key::try_from(&b"12345678901234567890123456789012"[..]).unwrap();
+            let id = ExternalAccountId::from("12345678901234567890123456789012");
+            let request = ExternalAccountBindingRequest { id, key };
+
+            let account_key = crate::key!("ec-p255");
+            let public_key = account_key.public_key();
+            let url = Url::from_str("https://example.com").unwrap();
+            let token = request.token(&public_key, url);
+            let serialized = serde_json::to_value(&token).unwrap();
+
+            let expected =
+                serde_json::from_str::<serde_json::Value>(crate::example!("external-binding.json"))
+                    .unwrap();
+
+            assert_eq!(serialized, expected);
+        }
     }
 }
 
-/// Identifier provided by an ACME service provider.
-///
-/// which is used to bind this account to an account created elsewhere
-/// (e.g. on the provider's website).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ExternalAccountId(String);
-
-impl From<String> for ExternalAccountId {
-    fn from(value: String) -> Self {
-        ExternalAccountId(value)
-    }
-}
-
-impl From<&str> for ExternalAccountId {
-    fn from(value: &str) -> Self {
-        ExternalAccountId(value.into())
-    }
-}
-
-/// The token used to bind an external account based on a Key from
-/// the provider.
-#[derive(Debug, Serialize)]
-pub struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
-
-// Create alias for HMAC-SHA256
-type HmacSha256 = hmac::Hmac<sha2::Sha256>;
-/// Information for externally binding accounts, provided
-/// by the ACME provider.
-#[derive(Debug)]
-pub struct ExternalAccountBindingRequest {
-    /// The idnetifier provided by the ACME provider for the external account.
-    pub id: ExternalAccountId,
-    /// The key provided by the ACME provider used to sign the binding request.
-    pub key: Key,
-}
-
-impl ExternalAccountBindingRequest {
-    /// Create a JWT token signed in a way to bind to the key associated with an ACME
-    /// account.
-    pub fn token(&self, public_key: &PublicKey, url: Url) -> ExternalAccountToken {
-        let token = UnsignedToken::post(
-            ProtectedHeader::new(
-                SignatureAlgorithm::HS256,
-                Some(self.id.clone()),
-                None,
-                url,
-                None,
-            ),
-            public_key.to_jwk(),
-        );
-
-        let mac =
-            HmacSha256::new_from_slice(self.key.as_ref()).expect("HMAC can take key of any size");
-
-        ExternalAccountToken(token.digest(mac).unwrap())
-    }
-}
+pub use external::*;
 
 /// A set of contact addresses to assosciate with an account.
 ///
@@ -240,14 +313,12 @@ impl UpdateAccount {
 }
 
 #[cfg(test)]
-#[derive(Serialize)]
-pub(super) struct CreateAccountPayload(CreateAccount);
-
-#[cfg(test)]
 mod test {
 
     use std::ops::Deref;
 
+    use crate::protocol::jose::ProtectedHeader;
+    use crate::protocol::jose::UnsignedToken;
     use crate::protocol::{fmt::AcmeFormat, jose::Nonce};
     use serde_json::Value;
 
