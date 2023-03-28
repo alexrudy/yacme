@@ -81,3 +81,4 @@ allow-branch = ["main"]
 tag-message = "Release {{crate_name}} version {{version}}"
 publish = false
 pre-release-hook = ["git", "branch", "-f", "release-{{version}}", "HEAD"]
+push = false
