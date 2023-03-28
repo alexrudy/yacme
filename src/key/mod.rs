@@ -274,14 +274,13 @@ impl fmt::Debug for InnerSigningKey {
     }
 }
 
-pub(crate) trait SigningKeyAlgorithm:
-    signature::Signer<Signature> + pkcs8::EncodePrivateKey
-{
+pub(crate) trait SigningKeyAlgorithm: signature::Signer<Signature> {
     fn as_jwk(&self) -> self::jwk::Jwk;
     fn public_key(&self) -> PublicKey;
     fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error>;
     fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
     fn kind(&self) -> SignatureKind;
+    fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument>;
 }
 
 pub(crate) trait PublicKeyAlgorithm {
@@ -312,7 +311,7 @@ pub(crate) mod test {
         ($name:tt) => {
             $crate::key::test::key(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../reference-keys/",
+                "/reference-keys/",
                 $name,
                 ".pem"
             )))

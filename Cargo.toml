@@ -1,7 +1,15 @@
-[workspace]
-members = ["yacme", "yacme-*"]
+[package]
+name = "yacme"
+version = "1.1.0"
+edition = "2021"
+authors = ["Alex Rudy <opensource@alexrudy.net>"]
+license = "MIT"
+repository = "https://github.com/alexrudy/yacme"
+description = "Yet another ACME client."
+categories = ["asynchronous", "network-programming", "cryptography"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[workspace.dependencies]
+[dependencies]
 arc-swap = "1.6.0"
 base64ct = { version = "^1.6.0", features = ["alloc"] }
 chrono = { version = "0.4.24", features = ["serde"] }
@@ -38,7 +46,33 @@ x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
 digest = { version = "^0.10.6" }
 ouroboros = { version = "^0.15.6" }
 mime = "0.3.17"
+const-oid = { version = "0.9.2", features = ["db"] }
+lazy_static = { version = "1.4.0", optional = true }
 
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+lazy_static = "1.4.0"
 
-yacme-test = { path = "yacme-test/" }
-yacme = { path = "yacme/" }
+[[example]]
+name = "pebble"
+path = "examples/letsencrypt-pebble.rs"
+required-features = ["pebble"]
+
+[[example]]
+name = "pebble-schema"
+path = "examples/low-level/pebble-schema.rs"
+required-features = ["pebble"]
+
+[[example]]
+name = "show-request"
+path = "examples/low-level/show-request.rs"
+required-features = ["pebble"]
+
+[features]
+pebble = ["lazy_static"]
+trace-requests = []
+
+[[test]]
+name = "pebble-integration"
+path = "tests/pebble.rs"
+required-features = ["pebble"]

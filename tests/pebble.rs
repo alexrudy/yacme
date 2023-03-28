@@ -22,7 +22,7 @@ async fn http01() {
 
 #[tracing::instrument("http01")]
 async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme_test::Pebble::new();
+    let pebble = yacme::pebble::Pebble::new();
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     let provider = Provider::build()
@@ -106,7 +106,7 @@ async fn dns01() {
 
 #[tracing::instrument("dns01")]
 async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme_test::Pebble::new();
+    let pebble = yacme::pebble::Pebble::new();
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     let provider = Provider::build()

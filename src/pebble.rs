@@ -1,3 +1,6 @@
+//! # Utilities for testing against the pebble ACME server
+//!
+
 use std::{
     io::{self, Read},
     net::Ipv4Addr,
@@ -8,6 +11,10 @@ use std::{
 use lazy_static::lazy_static;
 use serde::Serialize;
 
+/// Parse an HTTP response formatted like an RFC 8555 example.
+///
+/// The response body is not parsed, and instead passed literally in the
+/// returned response object.
 pub fn parse_http_response_example(data: &str) -> http::Response<String> {
     let mut lines = data.lines();
 
@@ -49,6 +56,7 @@ pub fn parse_http_response_example(data: &str) -> http::Response<String> {
     response
 }
 
+/// Read from a file to bytes.
 pub fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
     let mut buf = Vec::new();
@@ -56,6 +64,7 @@ pub fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+/// Read from a file to a string.
 pub fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
     let mut buf = String::new();
@@ -63,12 +72,15 @@ pub fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-const PEBBLE_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pebble/");
+const PEBBLE_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/");
 
 lazy_static! {
     static ref PEBBLE: Mutex<Arc<Pebble>> = Mutex::new(Arc::new(Pebble::create()));
 }
 
+/// RAII wrapper around a pebble service.
+///
+/// The pebble service will be started and managed via docker compose.
 #[derive(Debug)]
 pub struct Pebble {
     directory: PathBuf,
@@ -77,6 +89,11 @@ pub struct Pebble {
 impl Pebble {
     #[allow(clippy::new_without_default)]
 
+    /// Create a new pebble manager instance.
+    ///
+    /// This effectively acts as a signleton, in that only one pebble
+    /// docker container will be started at any given time, but creating
+    /// multiple `Pebble` instances will all refer to the same container.
     pub fn new() -> Arc<Self> {
         let pebble = PEBBLE.lock().unwrap();
         if Arc::strong_count(&pebble) == 1 {
@@ -111,12 +128,14 @@ impl Pebble {
         }
     }
 
+    /// Get the pebble root CA certificate.
     pub fn certificate(&self) -> reqwest::Certificate {
         let cert = self.directory.join("pebble.minica.pem");
 
         reqwest::Certificate::from_pem(&read_bytes(cert).unwrap()).expect("valid pebble root CA")
     }
 
+    /// Set a DNS A record for a given host on the pebble challenge responder.
     pub async fn dns_a(&self, host: &str, addresses: &[Ipv4Addr]) {
         #[derive(Debug, Serialize)]
         struct PebbleDNSRecord {
@@ -151,6 +170,7 @@ impl Pebble {
         }
     }
 
+    /// Set a DNS01 TXT record for a given host on the pebble challenge responder.
     pub async fn dns01(&self, host: &str, value: &str) {
         #[derive(Debug, Serialize)]
         struct Dns01TXT {
@@ -190,6 +210,7 @@ impl Pebble {
         }
     }
 
+    /// Configure the pebble challenge responder to serve a HTTP01 challenge.
     pub async fn http01(&self, token: &str, content: &str) {
         #[derive(Debug, Serialize)]
         struct Http01ChallengeSetup {
@@ -229,6 +250,9 @@ impl Pebble {
         }
     }
 
+    /// Stop the pebble docker container.
+    ///
+    /// This only takes effect if this is the last `Pebble` instance.
     pub fn down(self: &Arc<Self>) {
         let pebble = PEBBLE.lock().unwrap();
         if Arc::strong_count(self) == 2 {

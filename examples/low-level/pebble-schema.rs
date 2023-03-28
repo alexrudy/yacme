@@ -11,17 +11,17 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::key::SignatureKind;
-use crate::protocol::jose::AccountKeyIdentifier;
-use crate::protocol::{Client, Request, Response};
-use crate::schema::account::{Contacts, CreateAccount};
-use crate::schema::authorizations::Authorization;
-use crate::schema::challenges::{Challenge, ChallengeReadyRequest};
-use crate::schema::directory::Directory;
-use crate::schema::orders::{CertificateChain, FinalizeOrder, NewOrderRequest, OrderStatus};
-use crate::schema::{Account, Identifier, Order};
 use reqwest::Url;
 use serde::Serialize;
+use yacme::key::SignatureKind;
+use yacme::protocol::jose::AccountKeyIdentifier;
+use yacme::protocol::{Client, Request, Response};
+use yacme::schema::account::{Contacts, CreateAccount};
+use yacme::schema::authorizations::Authorization;
+use yacme::schema::challenges::{Challenge, ChallengeReadyRequest};
+use yacme::schema::directory::Directory;
+use yacme::schema::orders::{CertificateChain, FinalizeOrder, NewOrderRequest, OrderStatus};
+use yacme::schema::{Account, Identifier, Order};
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 
@@ -39,12 +39,12 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<crate::key::SigningKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKey> {
     let raw = read_string(path)?;
 
-    let key = crate::key::SigningKey::from_pkcs8_pem(
+    let key = yacme::key::SigningKey::from_pkcs8_pem(
         &raw,
-        crate::key::SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256),
+        yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
     )
     .unwrap();
 
@@ -228,7 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let key = Arc::new(SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256).random());
+    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
     let finalize = FinalizeOrder::new(order.payload(), &key);
     let mut order = client
         .execute::<_, Order>(Request::post(
