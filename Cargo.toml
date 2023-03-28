@@ -75,7 +75,3 @@ trace-requests = []
 name = "pebble-integration"
 path = "tests/pebble.rs"
 required-features = ["pebble"]
-
-[package.metadata.release]
-allow-branch = ["main"]
-tag-message = "Release {{crate_name}} version {{version}}"
