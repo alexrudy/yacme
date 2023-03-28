@@ -13,45 +13,43 @@ categories = ["asynchronous", "network-programming", "cryptography"]
 arc-swap = "1.6.0"
 base64ct = { version = "^1.6.0", features = ["alloc"] }
 chrono = { version = "0.4.24", features = ["serde"] }
-eyre = "0.6.8"
-http = "0.2.9"
-rand = { version = "0.8.5", features = ["getrandom"] }
-reqwest = { version = "^0.11", features = [
-    "rustls-tls",
-    "json",
-], default-features = false }
-serde = { version = "^1.0.158", features = ["derive"] }
-serde_json = "^1.0.94"
-signature = "^2.0.0"
-thiserror = "^1.0.40"
-tracing = { version = "0.1.37", features = ["async-await"] }
-url = { version = "2.3.1", features = ["serde"] }
-der = { version = "0.6.1", features = ["std", "pem", "oid", "derive"] }
+const-oid = { version = "0.9.2", features = ["db"] }
+der = { version = "0.6.1", features = ["std", "pem", "oid"] }
+digest = { version = "^0.10.6" }
+ecdsa = { version = "^0.15.1", features = ["std", "pkcs8", "pem"] }
 elliptic-curve = { version = "^0.12.3", features = [
     "pkcs8",
     "jwk",
     "arithmetic",
     "sec1",
 ] }
-ecdsa = { version = "^0.15.1", features = ["std", "pkcs8", "pem"] }
-rsa = "^0.8.2"
-p256 = { version = "^0.12.0", features = ["pkcs8", "arithmetic", "jwk"] }
-pkcs8 = { version = "^0.9.0", features = ["alloc", "pem"] }
 hmac = "^0.12.1"
-sha2 = "^0.10.6"
-pem-rfc7468 = { version = "^0.6.0", features = ["std"] }
-tokio = { version = "^1.26" }
-tracing-subscriber.version = "^0.3"
-x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
-digest = { version = "^0.10.6" }
-ouroboros = { version = "^0.15.6" }
-mime = "0.3.17"
-const-oid = { version = "0.9.2", features = ["db"] }
+http = "0.2.9"
 lazy_static = { version = "1.4.0", optional = true }
+mime = "0.3.17"
+ouroboros = { version = "^0.15.6" }
+p256 = { version = "^0.12.0", features = ["pkcs8", "arithmetic", "jwk"] }
+pem-rfc7468 = { version = "^0.6.0", features = ["std"] }
+pkcs8 = { version = "^0.9.0", features = ["alloc", "pem"] }
+rsa = "^0.8.2"
+reqwest = { version = "^0.11", features = [
+    "rustls-tls",
+    "json",
+], default-features = false }
+serde = { version = "^1.0.158", features = ["derive"] }
+serde_json = "^1.0.94"
+sha2 = "^0.10.6"
+signature = "^2.0.0"
+thiserror = "^1.0.40"
+tokio = { version = "^1.26" }
+tracing = { version = "^0.1" }
+url = { version = "2.3.1", features = ["serde"] }
+x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
+tracing-subscriber.version = "^0.3"
 
 [[example]]
 name = "pebble"

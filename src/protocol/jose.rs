@@ -385,7 +385,7 @@ pub enum SigningError {
 impl From<SigningError> for AcmeError {
     fn from(value: SigningError) -> Self {
         match value {
-            SigningError::Signing(error) => Self::Signing(eyre::Report::msg(error)),
+            SigningError::Signing(error) => Self::Signing(error),
             SigningError::JsonSerialize(error) => Self::ser(error),
         }
     }
