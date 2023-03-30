@@ -343,6 +343,15 @@ mod test {
     }
 
     #[test]
+    fn deserialize_account_le() {
+        let raw = crate::example!("account-le-style.json");
+        let account: Account = serde_json::from_str(raw).unwrap();
+
+        assert_eq!(account.status, AccountStatus::Valid);
+        assert_eq!(account.orders, None);
+    }
+
+    #[test]
     fn new_account_request() {
         let nonce = "6S8IqOGY7eL2lsGoTZYifg";
         let key = crate::key!("ec-p255");
