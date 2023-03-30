@@ -370,7 +370,15 @@ impl OrderBuilder {
 
 pub(crate) async fn list(account: &Account, limit: Option<usize>) -> Result<Vec<Order>, AcmeError> {
     let client = account.client();
-    let mut request = Request::get(account.schema().orders.clone(), account.request_key());
+    let mut request = Request::get(
+        account
+            .schema()
+            .orders
+            .as_ref()
+            .ok_or_else(|| AcmeError::MissingData("orders url"))?
+            .clone(),
+        account.request_key(),
+    );
     let mut orders = Vec::new();
     let mut page = 0;
     loop {

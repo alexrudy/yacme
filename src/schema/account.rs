@@ -204,6 +204,11 @@ impl Contacts {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Iterate through the contact URLs in this set.
+    pub fn iter(&self) -> impl Iterator<Item = &Url> {
+        self.0.iter()
+    }
 }
 
 impl ser::Serialize for Contacts {
@@ -238,7 +243,8 @@ pub struct Account {
     pub terms_of_service_agreed: Option<bool>,
 
     /// The url to fetch a list of orders from the ACME provider.
-    pub orders: Url,
+    #[serde(default)]
+    pub orders: Option<Url>,
 }
 
 /// # Account Status
@@ -332,8 +338,17 @@ mod test {
         assert_eq!(account.status, AccountStatus::Valid);
         assert_eq!(
             account.orders,
-            "https://example.com/acme/orders/rzGoeA".parse().unwrap()
+            "https://example.com/acme/orders/rzGoeA".parse().ok()
         );
+    }
+
+    #[test]
+    fn deserialize_account_le() {
+        let raw = crate::example!("account-le-style.json");
+        let account: Account = serde_json::from_str(raw).unwrap();
+
+        assert_eq!(account.status, AccountStatus::Valid);
+        assert_eq!(account.orders, None);
     }
 
     #[test]
