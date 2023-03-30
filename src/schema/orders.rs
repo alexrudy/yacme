@@ -168,6 +168,25 @@ pub struct CertificateChain {
 }
 
 impl CertificateChain {
+    /// Try to create a new certificate chain from a list of DER encoded documents.
+    pub fn try_from_der(documents: Vec<Vec<u8>>) -> Result<Self, AcmeError> {
+        Ok(CertificateChainTryBuilder {
+            data: documents,
+            chain_builder: |documents: &Vec<Vec<u8>>| {
+                documents
+                    .iter()
+                    .map(|doc| x509_cert::Certificate::from_der(doc))
+                    .collect::<Result<Vec<_>, der::Error>>()
+            },
+        }
+        .try_build()?)
+    }
+
+    /// The certificate chain
+    pub fn chain(&self) -> &[x509_cert::Certificate] {
+        self.borrow_chain()
+    }
+
     /// Create a list of PEM documents representing the certificate chain.
     pub fn to_pem_documents(&self) -> Result<Vec<String>, AcmeError> {
         let docs = self
