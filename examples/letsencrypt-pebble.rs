@@ -43,10 +43,9 @@ fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKe
     Ok(key)
 }
 
-const PRIVATE_KEY_PATH: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../reference-keys/ec-p255.pem");
+const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
 
-const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pebble/pebble.minica.pem");
+const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
