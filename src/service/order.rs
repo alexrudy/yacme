@@ -3,63 +3,30 @@
 //! Each order is for a single certificate chain, but that certificate chain
 //! may cover multiple DNS identities.
 
-use std::{collections::hash_map::Entry, ops::DerefMut, sync::Arc};
-
 use crate::key::SigningKey;
 use crate::protocol::{AcmeError, Request, Response, Url};
+use crate::schema;
 use crate::schema::{
     authorizations::Authorization as AuthorizationSchema,
-    orders::{CertificateChain, FinalizeOrder, NewOrderRequest, Orders},
+    orders::{CertificateChain, FinalizeOrder, NewOrderRequest},
     orders::{Order as OrderSchema, OrderStatus},
     Identifier,
 };
-use arc_swap::Guard;
 use chrono::{DateTime, Utc};
 
-use super::{
-    account::Account,
-    authorization::Authorization,
-    cache::{Cache, Cacheable},
-    client::Client,
-    Container,
-};
-
-#[derive(Debug, Default)]
-pub(crate) struct OrderState {
-    pub authorizations: Cache<Authorization, ()>,
-}
+use super::{account::Account, authorization::Authorization, client::Client};
 
 /// Order for a certificate for a set of identifiers.
-#[derive(Debug, Clone)]
-pub struct Order {
-    account: Account,
-    certificate_key: Option<Arc<SigningKey>>,
-    data: Container<OrderSchema, OrderState>,
+#[derive(Debug)]
+pub struct Order<'a> {
+    account: &'a Account,
+    data: schema::Order,
+    url: Url,
 }
 
-impl Order {
-    pub(crate) fn new(
-        account: Account,
-        certificate_key: Option<Arc<SigningKey>>,
-        info: OrderSchema,
-        url: Url,
-    ) -> Self {
-        Self {
-            account,
-            certificate_key,
-            data: Container::new(info, url),
-        }
-    }
-
-    pub(crate) fn from_container(
-        account: Account,
-        container: Container<OrderSchema, OrderState>,
-    ) -> Self {
-        Self {
-            account,
-            certificate_key: None,
-            data: container,
-        }
+impl<'a> Order<'a> {
+    pub(crate) fn new(account: &'a Account, data: schema::Order, url: Url) -> Self {
+        Self { account, data, url }
     }
 
     #[inline]
@@ -69,20 +36,20 @@ impl Order {
 
     #[inline]
     pub(crate) fn account(&self) -> &Account {
-        &self.account
+        self.account
     }
 
     /// The get URL for this order, for fetching and uniquely identifying
     /// this order.
     pub fn url(&self) -> &Url {
-        self.data.url()
+        &self.url
     }
 
     /// The order data, as defined by [`crate::schema::orders::Order`].
     ///
     /// This is useful for accessing the underlying order fields.
-    pub fn schema(&self) -> Guard<Arc<OrderSchema>> {
-        self.data.schema()
+    pub fn data(&self) -> &schema::Order {
+        &self.data
     }
 
     /// Get the status of this order.
@@ -90,57 +57,37 @@ impl Order {
     /// This does not refresh the underlying order data. To wait for a particular
     /// status, use [`Order::refresh`] along with this method.
     pub fn status(&self) -> OrderStatus {
-        *self.data.schema().status()
-    }
-
-    /// Set the signing key for certifiactes generated with this order
-    ///
-    /// A signing key is required to finalize an order, and must be different from the
-    /// signing key used for this account.
-    pub fn certificate_key(&mut self, certificate_key: Arc<SigningKey>) {
-        debug_assert!(
-            self.account().key() != certificate_key,
-            "Account key and certificate key must be different"
-        );
-        self.certificate_key = Some(certificate_key);
+        *self.data.status()
     }
 
     /// Refresh the order information from the ACME provider.
-    pub async fn refresh(&self) -> Result<(), AcmeError> {
-        self.data
-            .refresh(self.client(), self.account().request_key())
-            .await
+    pub async fn refresh(&mut self) -> Result<(), AcmeError> {
+        let response: Response<schema::Order> = self
+            .client()
+            .execute(Request::get(
+                self.url().clone(),
+                self.account().request_key(),
+            ))
+            .await?;
+
+        self.data = response.into_inner();
+        Ok(())
     }
 
     /// Fetch the authorizations for this order.
     pub async fn authorizations(&self) -> Result<Vec<Authorization>, AcmeError> {
         let client = self.client();
         let mut authorizations = Vec::new();
-        for auth_url in self.data.schema().authorizations() {
+        for auth_url in self.data.authorizations() {
             let authz: Response<AuthorizationSchema> = client
                 .execute(Request::get(auth_url.clone(), self.account().request_key()))
                 .await?;
 
-            let mut cache = self.data.state().authorizations.inner();
-            match cache
-                .deref_mut()
-                .deref_mut()
-                .entry(authz.payload().identifier.clone())
-            {
-                Entry::Occupied(entry) => {
-                    let authc = entry.get();
-                    authc.store(authz.into_inner());
-
-                    let authn = Authorization::from_container(self.clone(), authc.clone());
-                    authorizations.push(authn);
-                }
-                Entry::Vacant(entry) => {
-                    let authn =
-                        Authorization::new(self.clone(), authz.into_inner(), auth_url.clone());
-                    entry.insert(authn.data.clone());
-                    authorizations.push(authn);
-                }
-            }
+            authorizations.push(Authorization::new(
+                self,
+                authz.into_inner(),
+                auth_url.clone(),
+            ));
         }
 
         Ok(authorizations)
@@ -148,21 +95,11 @@ impl Order {
 
     /// Fetch a single authorization by identifier, refreshing that authorization on the way.
     pub async fn authorization(&self, id: &Identifier) -> Result<Option<Authorization>, AcmeError> {
-        if let Some(authc) = self.data.state().authorizations.get(id) {
-            authc
-                .refresh(self.client(), self.account().request_key())
-                .await?;
-            Ok(Some(Authorization::from_container(
-                self.clone(),
-                authc.clone(),
-            )))
-        } else {
-            Ok(self
-                .authorizations()
-                .await?
-                .into_iter()
-                .find(|authn| &authn.schema().identifier == id))
-        }
+        Ok(self
+            .authorizations()
+            .await?
+            .into_iter()
+            .find(|authn| &authn.data().identifier == id))
     }
 
     /// Submit a certificate signing request for this order.
@@ -170,28 +107,27 @@ impl Order {
     /// This does not download the certificate itself, see [`Order::download`] for that, or use the
     /// combined [`Order::finalize_and_download`] method to submit the certificate signing request,
     /// and asynchronously wait for the certificate to be ready for download.
-    pub async fn finalize(&self) -> Result<(), AcmeError> {
+    pub async fn finalize(&mut self, key: &SigningKey) -> Result<(), AcmeError> {
         tracing::trace!("Creating CSR for finalization request");
-        let Some(certificate_key) = self.certificate_key.as_ref() else { return Err(AcmeError::MissingKey("certificate")) };
 
-        let body = FinalizeOrder::new(self.data.schema().as_ref(), certificate_key);
+        let body = FinalizeOrder::new(&self.data, key);
         let request = Request::post(
             body,
-            self.data.schema().finalize().clone(),
+            self.data.finalize().clone(),
             self.account().request_key(),
         );
         tracing::trace!("Sending order finalize request");
         let info: Response<crate::schema::Order> = self.client().execute(request).await?;
-        self.data.store(info.into_inner());
+        self.data = info.into_inner();
 
         Ok(())
     }
 
-    async fn poll_for_order_ready(&self) -> Result<(), AcmeError> {
+    async fn poll_for_order_ready(&mut self) -> Result<(), AcmeError> {
         self.refresh().await?;
-        match self.schema().status() {
+        match self.status() {
             OrderStatus::Valid | OrderStatus::Invalid => {
-                tracing::debug!(status=?self.schema().status(), "Order was already finished");
+                tracing::debug!(status=?self.status(), "Order was already finished");
                 return Ok(());
             }
             OrderStatus::Ready | OrderStatus::Pending => {
@@ -216,16 +152,13 @@ impl Order {
                 .retry_after()
                 .unwrap_or_else(|| std::time::Duration::from_secs(1));
 
-            self.data.store(info.into_inner());
-            if matches!(
-                self.schema().status(),
-                OrderStatus::Valid | OrderStatus::Invalid
-            ) {
-                tracing::debug!(status=?self.schema().status(), "Order is finished");
+            self.data = info.into_inner();
+            if matches!(self.status(), OrderStatus::Valid | OrderStatus::Invalid) {
+                tracing::debug!(status=?self.status(), "Order is finished");
                 break;
             }
 
-            tracing::trace!(status=?self.schema().status(), delay=?delay, "Order is not finished");
+            tracing::trace!(status=?self.status(), delay=?delay, "Order is not finished");
             tokio::time::sleep(delay).await;
         }
 
@@ -237,7 +170,7 @@ impl Order {
     /// In order for the certificate to be ready, you must have submitted a certificate signing request
     /// (see [`Order::finalize`]), and the order must have finished processing, which
     pub async fn download(&self) -> Result<CertificateChain, AcmeError> {
-        let order_info = self.data.schema();
+        let order_info = &self.data;
         let Some(url) = order_info.certificate() else { return Err(AcmeError::NotReady("certificate")) };
 
         let request = Request::get(url.clone(), self.account().request_key());
@@ -251,22 +184,13 @@ impl Order {
     /// This submits the certificate signing request, and then waits for the ACME
     /// provider to indicate that the certifiacte is done processing before returning
     /// the certificate chain.
-    pub async fn finalize_and_download(&self) -> Result<CertificateChain, AcmeError> {
-        self.finalize().await?;
+    pub async fn finalize_and_download(
+        &mut self,
+        key: &SigningKey,
+    ) -> Result<CertificateChain, AcmeError> {
+        self.finalize(key).await?;
         self.poll_for_order_ready().await?;
         self.download().await
-    }
-}
-
-impl Cacheable<OrderState> for Order {
-    type Key = Url;
-    type Value = OrderSchema;
-    fn key(&self) -> Self::Key {
-        self.data.url().clone()
-    }
-
-    fn container(&self) -> Container<Self::Value, OrderState> {
-        self.data.clone()
     }
 }
 
@@ -274,15 +198,15 @@ impl Cacheable<OrderState> for Order {
 ///
 /// To create an [`OrderBuilder`], use [`Account::order`].
 #[derive(Debug)]
-pub struct OrderBuilder {
-    account: Account,
+pub struct OrderBuilder<'a> {
+    account: &'a Account,
     identifiers: Vec<Identifier>,
     not_before: Option<DateTime<Utc>>,
     not_after: Option<DateTime<Utc>>,
 }
 
-impl OrderBuilder {
-    pub(crate) fn new(account: Account) -> Self {
+impl<'a> OrderBuilder<'a> {
+    pub(crate) fn new(account: &'a Account) -> Self {
         Self {
             account,
             identifiers: Vec::new(),
@@ -324,8 +248,8 @@ impl OrderBuilder {
     }
 
     /// Send the request to create an order, returning an [`Order`].
-    pub async fn create(self) -> Result<Order, AcmeError> {
-        let account = self.account.clone();
+    pub async fn create(self) -> Result<Order<'a>, AcmeError> {
+        let account = self.account;
         let payload = NewOrderRequest {
             identifiers: self.identifiers,
             not_before: self.not_before,
@@ -342,37 +266,27 @@ impl OrderBuilder {
             .await?;
 
         let order_url = order.location().expect("New order should have a location");
-        let order = Order::new(account, None, order.into_inner(), order_url);
-        self.account.cache().insert(order.clone());
+        let order = Order::new(account, order.into_inner(), order_url);
 
         Ok(order)
     }
 
     /// Get an existing order by URL
-    pub async fn get(self, url: Url) -> Result<Order, AcmeError> {
-        if let Some(order) = self.account.cache().get(&url) {
-            order
-                .refresh(self.account.client(), self.account.request_key())
-                .await?;
-            return Ok(Order::from_container(self.account, order));
-        }
-
-        let account = self.account.clone();
-        let order: Response<crate::schema::Order> = account
+    pub async fn get(self, url: Url) -> Result<Order<'a>, AcmeError> {
+        let order: Response<crate::schema::Order> = self
+            .account
             .client()
-            .execute(Request::get(url.clone(), account.request_key()))
+            .execute(Request::get(url.clone(), self.account.request_key()))
             .await?;
-        let order = Order::new(account, None, order.into_inner(), url);
-        self.account.cache().insert(order.clone());
+        let order = Order::new(self.account, order.into_inner(), url);
         Ok(order)
     }
 }
-
 pub(crate) async fn list(account: &Account, limit: Option<usize>) -> Result<Vec<Order>, AcmeError> {
     let client = account.client();
     let mut request = Request::get(
         account
-            .schema()
+            .data()
             .orders
             .as_ref()
             .ok_or_else(|| AcmeError::MissingData("orders url"))?
@@ -384,13 +298,13 @@ pub(crate) async fn list(account: &Account, limit: Option<usize>) -> Result<Vec<
     loop {
         tracing::debug!("Fetching orders, page {page}");
         let response = client.execute(request.clone()).await?;
-        let orders_page: Orders = response.into_inner();
+        let orders_page: schema::orders::Orders = response.into_inner();
 
         for order_url in orders_page.orders {
             let response: Response<OrderSchema> = client
                 .execute(Request::get(order_url.clone(), account.request_key()))
                 .await?;
-            let order = Order::new(account.clone(), None, response.into_inner(), order_url);
+            let order = Order::new(account, response.into_inner(), order_url);
             orders.push(order);
         }
 

@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = account_key.to_pkcs8_pem(LineEnding::default()).unwrap();
 
     // Fetch an existing account
-    let account = provider.account().key(account_key).must_exist().get().await?;
+    let account = provider.account(account_key).must_exist().get().await?;
 
     // Create a new order
     let mut order = account
@@ -56,9 +56,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Get the authorizations
-    let authz: Vec<Authorization> = order.authorizations().await?;
-    let auth = authz.first().unwrap();
-    let chall = auth
+    let mut authz: Vec<Authorization> = order.authorizations().await?;
+    let auth = &mut authz[0];
+    let mut chall = auth
         .challenge(&ChallengeKind::Http01)
         .ok_or("No http01 challenge provided")?;
     let inner = chall.http01().unwrap();
@@ -70,11 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set a certifiacte key
     let cert_key = Arc::new(SignatureKind::Ecdsa(EcdsaAlgorithm::P256).random());
 
-    // Attach the certificate key to the order
-    order.certificate_key(cert_key);
-
     // Finalize and fetch the order
-    let cert = order.finalize_and_download().await?;
+    let cert = order.finalize_and_download(&cert_key).await?;
 
     Ok(())
 }

@@ -67,9 +67,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Get an account
     tracing::info!("Requesting account");
     let account = provider
-        .account()
+        .account(key)
         .add_contact_email("hello@example.test")?
-        .key(key)
         .create()
         .await?;
 
@@ -86,15 +85,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Completing Authorizations");
 
-    for auth in order.authorizations().await? {
+    for auth in order.authorizations().await?.iter_mut() {
         tracing::info!("Authorizing {:?}", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
+        if !matches!(auth.data().status, AuthorizationStatus::Pending) {
             continue;
         }
 
-        let chall = auth
+        let mut chall = auth
             .challenge(&ChallengeKind::Http01)
             .ok_or("No http01 challenge provided")?;
         let inner = chall.http01().unwrap();
@@ -109,8 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Generating random certificate key");
     let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
 
-    order.certificate_key(key);
-    let cert = order.finalize_and_download().await?;
+    let cert = order.finalize_and_download(&key).await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 

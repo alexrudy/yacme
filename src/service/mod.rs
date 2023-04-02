@@ -16,19 +16,16 @@
 
 use std::sync::Arc;
 
-use arc_swap::{ArcSwap, Guard};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::protocol::{
-    request::{Encode, Key},
-    AcmeError, Request, Response, Result, Url,
-};
+use crate::key::SigningKey;
+use crate::protocol::{AcmeError, Result, Url};
 use crate::schema::directory::Directory;
 
 pub mod account;
 pub mod authorization;
-pub(crate) mod cache;
+// pub(crate) mod cache;
 mod client;
 pub mod order;
 
@@ -39,96 +36,17 @@ pub use self::order::Order;
 
 use self::client::Client;
 
-#[derive(Debug)]
-pub(crate) struct InnerContainer<T, S> {
-    schema: ArcSwap<T>,
-    url: Url,
-    state: S,
-}
-
-impl<T, S> InnerContainer<T, S> {
-    pub(crate) fn new(schema: T, url: Url, state: S) -> Self {
-        Self {
-            schema: ArcSwap::new(Arc::new(schema)),
-            url,
-            state,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Container<T, S> {
-    inner: Arc<InnerContainer<T, S>>,
-}
-
-impl<T, S> Container<T, S>
-where
-    S: Default,
-{
-    pub(crate) fn new(item: T, url: Url) -> Self {
-        Self {
-            inner: Arc::new(InnerContainer::new(item, url, S::default())),
-        }
-    }
-}
-
-impl<T, S> Clone for Container<T, S> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-impl<T, S> Container<T, S> {
-    #[inline]
-    pub(crate) fn store(&self, item: T) {
-        self.inner.schema.store(Arc::new(item))
-    }
-
-    #[inline]
-    pub(crate) fn schema(&self) -> Guard<Arc<T>> {
-        self.inner.schema.load()
-    }
-
-    #[inline]
-    pub(crate) fn state(&self) -> &S {
-        &self.inner.state
-    }
-
-    #[inline]
-    pub(crate) fn url(&self) -> &Url {
-        &self.inner.url
-    }
-}
-impl<T, S> Container<T, S>
-where
-    T: DeserializeOwned + Encode,
-{
-    pub(crate) async fn refresh<K: Into<Key>>(&self, client: &Client, key: K) -> Result<()> {
-        let info: Response<T> = client
-            .execute(Request::get(self.url().clone(), key))
-            .await?;
-        self.store(info.into_inner());
-        Ok(())
-    }
-}
-
 /// An ACME Service Provider
 ///
 /// Providers are identified by a directory URL, and store the
 /// directory along side themselves when serialized.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Provider {
-    data: Arc<ProviderData>,
-    client: Client,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ProviderData {
     name: Option<String>,
     url: Url,
     directory: Directory,
+    #[serde(skip, default)]
+    client: Client,
 }
 
 impl Provider {
@@ -140,39 +58,34 @@ impl Provider {
         let client = Client::default();
         let directory: Directory = client.get(url.clone()).await?.into_inner();
 
-        let data = ProviderData {
+        Ok(Provider {
             name: None,
             url,
             directory,
-        };
-
-        Ok(Provider {
-            data: Arc::new(data),
             client,
         })
     }
 
     /// The name of this ACME Service provider, if specified
     pub fn name(&self) -> Option<&str> {
-        self.data.name.as_deref()
+        self.name.as_deref()
     }
 
     /// The hostname for this ACME service provider
     pub fn host(&self) -> &str {
-        self.data
-            .url
+        self.url
             .host_str()
             .expect("ACME providers should have an https:// url with a well defined hostname")
     }
 
     /// The configuration directory for this ACME service provider
     pub fn directory(&self) -> &Directory {
-        &self.data.directory
+        &self.directory
     }
 
     /// Get or create an account
-    pub fn account(&self) -> self::account::AccountBuilder {
-        self::account::AccountBuilder::new(self.clone())
+    pub fn account(&self, key: Arc<SigningKey>) -> self::account::AccountBuilder {
+        self::account::AccountBuilder::new(self.clone(), key)
     }
 
     #[inline]
@@ -196,7 +109,7 @@ pub enum BuilderError {
     #[error("Building HTTPS client: {0}")]
     Client(#[source] reqwest::Error),
 
-    /// No directory URL was specified, and the directory was not specified..
+    /// No directory URL was specified, and the directory was not specified.
     #[error("Missing provider URL")]
     Url,
 
@@ -279,14 +192,10 @@ impl ProviderBuilder {
 
         client.set_new_nonce_url(directory.new_nonce.clone());
 
-        let data = ProviderData {
+        Ok(Provider {
             name: self.name,
             url,
             directory,
-        };
-
-        Ok(Provider {
-            data: Arc::new(data),
             client: Client::new(client),
         })
     }

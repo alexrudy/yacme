@@ -45,6 +45,7 @@ tokio = { version = "^1.26" }
 tracing = { version = "^0.1" }
 url = { version = "2.3.1", features = ["serde"] }
 x509-cert = { version = "0.1.1", features = ["alloc", "pem", "std"] }
+moka = { version = "0.10.1", features = ["future"] }
 
 [dev-dependencies]
 lazy_static = "1.4.0"

@@ -2,45 +2,37 @@
 //!
 use std::sync::Arc;
 
-use arc_swap::Guard;
-
 use crate::key::SigningKey;
 use crate::protocol::{request::Key, AcmeError, Request, Response, Url};
 use crate::schema::{
-    account::Account as AccountSchema,
+    self,
     account::{Contacts, CreateAccount, ExternalAccountBindingRequest},
     directory::Directory,
 };
 
 use super::{
-    cache::Cache,
-    order::{Order, OrderBuilder, OrderState},
-    Container, Provider,
+    order::{Order, OrderBuilder},
+    Provider,
 };
-
-type AccountState = Cache<Order, OrderState>;
 
 /// An account with an ACME provider
 ///
 /// Accounts are identified by their signing key.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Account {
     provider: Provider,
-    key: Arc<crate::key::SigningKey>,
-    data: Container<AccountSchema, AccountState>,
+    key: Arc<SigningKey>,
+    data: schema::Account,
+    url: Url,
 }
 
 impl Account {
-    fn new(
-        provider: Provider,
-        key: Arc<crate::key::SigningKey>,
-        info: crate::schema::Account,
-        url: Url,
-    ) -> Self {
+    fn new(provider: Provider, key: Arc<SigningKey>, data: schema::Account, url: Url) -> Self {
         Self {
             provider,
             key,
-            data: Container::new(info, url),
+            data,
+            url,
         }
     }
 
@@ -55,58 +47,53 @@ impl Account {
     }
 
     /// Refresh this account's data from the ACME service
-    pub async fn refresh(&self) -> Result<(), AcmeError> {
-        self.data.refresh(self.client(), self.request_key()).await
+    pub async fn refresh(&mut self) -> Result<(), AcmeError> {
+        let response: Response<schema::Account> = self
+            .client()
+            .execute(Request::get(self.url().clone(), self.request_key()))
+            .await?;
+
+        self.data = response.into_inner();
+        Ok(())
     }
 
     /// Create an update request for an account.
     ///
     /// Update requests are built using the [`UpdateAccount`] builder.
-    pub fn update(&self) -> UpdateAccount {
-        UpdateAccount::new(self.clone())
+    pub fn update(&mut self) -> UpdateAccount {
+        UpdateAccount::new(self)
     }
 
     /// The raw [`crate::schema::Account`] associated with this account
-    pub fn schema(&self) -> Guard<Arc<crate::schema::Account>> {
-        self.data.schema()
+    pub fn data(&self) -> &schema::Account {
+        &self.data
     }
 
     /// Signing key which identifies this account
-    pub fn key(&self) -> Arc<crate::key::SigningKey> {
+    pub fn key(&self) -> Arc<SigningKey> {
         self.key.clone()
     }
 
     /// Identifying URL for this account
     pub fn url(&self) -> &Url {
-        self.data.url()
+        &self.url
     }
 
     /// Key used for signing requests, including identifier
     pub(crate) fn request_key(&self) -> impl Into<Key> {
-        (self.key(), self.data.url().clone())
+        (self.key(), self.url.clone())
     }
 
     /// Create a new order for a certificate
     pub fn order(&self) -> OrderBuilder {
-        OrderBuilder::new(self.clone())
+        OrderBuilder::new(self)
     }
 
     /// Get a list of orders associated with this account
     pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order>, AcmeError> {
         let orders = super::order::list(self, limit).await?;
 
-        let mut cache = self.cache().inner();
-
-        for order in &orders {
-            cache.insert(order.clone());
-        }
-
         Ok(orders)
-    }
-
-    /// Get the order cache.
-    pub(crate) fn cache(&self) -> &Cache<Order, OrderState> {
-        self.data.state()
     }
 }
 
@@ -117,18 +104,18 @@ pub struct AccountBuilder {
     terms_of_service_agreed: Option<bool>,
     only_return_existing: Option<bool>,
     external_account_binding: Option<ExternalAccountBindingRequest>,
-    key: Option<Arc<SigningKey>>,
+    key: Arc<SigningKey>,
     provider: Provider,
 }
 
 impl AccountBuilder {
-    pub(crate) fn new(provider: Provider) -> Self {
+    pub(crate) fn new(provider: Provider, key: Arc<SigningKey>) -> Self {
         AccountBuilder {
             contact: Default::default(),
             terms_of_service_agreed: None,
             only_return_existing: None,
             external_account_binding: None,
-            key: None,
+            key,
             provider,
         }
     }
@@ -166,21 +153,13 @@ impl AccountBuilder {
         self
     }
 
-    /// Set the account signing key (note that this key must be different
-    /// from the certificate signing key).)
-    pub fn key(mut self, key: Arc<SigningKey>) -> Self {
-        self.key = Some(key);
-        self
-    }
-
     /// Create a new account with the ACME provider.
     ///
     /// The request is sent as a [`CreateAccount`].
     /// If [`AccountBuilder::must_exist`] is set, this method acts like [`AccountBuilder::get`].
     pub async fn create(self) -> Result<Account, AcmeError> {
         let url = self.provider.directory().new_account.clone();
-        let key = self.key.ok_or(AcmeError::MissingKey("account"))?;
-        let public_key = key.public_key();
+        let public_key = self.key.public_key();
         let payload = CreateAccount {
             contact: self.contact,
             terms_of_service_agreed: self.terms_of_service_agreed,
@@ -193,7 +172,7 @@ impl AccountBuilder {
         let account: Response<crate::schema::Account> = self
             .provider
             .client()
-            .execute(Request::post(payload, url, key.clone()))
+            .execute(Request::post(payload, url, self.key.clone()))
             .await?;
 
         let account_url = account
@@ -202,7 +181,7 @@ impl AccountBuilder {
 
         Ok(Account::new(
             self.provider,
-            key,
+            self.key,
             account.into_inner(),
             account_url,
         ))
@@ -219,15 +198,15 @@ impl AccountBuilder {
 
 /// Update the contacts associated with an account
 #[derive(Debug)]
-pub struct UpdateAccount {
+pub struct UpdateAccount<'a> {
     contact: Contacts,
-    account: Account,
+    account: &'a mut Account,
 }
 
-impl UpdateAccount {
-    fn new(account: Account) -> Self {
+impl<'a> UpdateAccount<'a> {
+    fn new(account: &'a mut Account) -> Self {
         UpdateAccount {
-            contact: account.schema().contact.clone(),
+            contact: account.data().contact.clone(),
             account,
         }
     }
@@ -250,7 +229,13 @@ impl UpdateAccount {
             .execute(Request::post(request, url, key))
             .await?;
 
-        self.account.data.store(account.into_inner());
+        let account_url = account
+            .location()
+            .ok_or_else(|| AcmeError::MissingData("account id URL"))?;
+
+        assert_eq!(account_url, self.account.url);
+
+        self.account.data = account.into_inner();
         Ok(())
     }
 }

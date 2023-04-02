@@ -37,10 +37,9 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Get an account
     tracing::info!("Requesting account");
     let account = provider
-        .account()
+        .account(key)
         .add_contact_email("hello@example.test")?
         .agree_to_terms_of_service()
-        .key(key)
         .create()
         .await?;
 
@@ -57,20 +56,20 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Completing Authorizations");
 
-    for auth in order.authorizations().await? {
+    for auth in order.authorizations().await?.iter_mut() {
         tracing::info!("Authorizing {:?} with HTTP01", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
+        if !matches!(auth.data().status, AuthorizationStatus::Pending) {
             continue;
         }
 
-        let chall = auth
+        let mut chall = auth
             .challenge(&ChallengeKind::Http01)
             .ok_or("Pebble did not provide an http-01 challenge")?;
 
-        let schema = chall.schema();
-        let inner = match schema.deref().deref() {
+        let schema = chall.data();
+        let inner = match schema {
             Challenge::Http01(inner) => inner,
             _ => panic!("wat? didn't we just check the challenge type?"),
         };
@@ -88,8 +87,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Generating random certificate key");
     let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
 
-    order.certificate_key(certificate_key);
-    let cert = order.finalize_and_download().await?;
+    let cert = order.finalize_and_download(&certificate_key).await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
@@ -121,10 +119,9 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Get an account
     tracing::info!("Requesting account");
     let account = provider
-        .account()
+        .account(key)
         .add_contact_email("hello@example.test")?
         .agree_to_terms_of_service()
-        .key(key)
         .create()
         .await?;
 
@@ -141,20 +138,20 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Completing Authorizations");
 
-    for auth in order.authorizations().await? {
+    for auth in order.authorizations().await?.iter_mut() {
         tracing::info!("Authorizing {:?} with DNS01", auth.identifier());
         tracing::trace!("Authorization: \n{auth:#?}");
 
-        if !matches!(auth.schema().status, AuthorizationStatus::Pending) {
+        if !matches!(auth.data().status, AuthorizationStatus::Pending) {
             continue;
         }
 
-        let chall = auth
+        let mut chall = auth
             .challenge(&ChallengeKind::Dns01)
             .ok_or("Pebble did not provide an dns-01 challenge")?;
 
-        let schema = chall.schema();
-        let inner = match schema.deref().deref() {
+        let schema = chall.data();
+        let inner = match schema {
             Challenge::Dns01(inner) => inner,
             _ => panic!("wat? didn't we just check the challenge type?"),
         };
@@ -175,8 +172,7 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Generating random certificate key");
     let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
 
-    order.certificate_key(certificate_key);
-    let cert = order.finalize_and_download().await?;
+    let cert = order.finalize_and_download(&certificate_key).await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
