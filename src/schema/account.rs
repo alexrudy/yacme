@@ -18,7 +18,6 @@ pub mod external {
 
     use crate::key::jwk::Jwk;
     use crate::key::PublicKey;
-    use crate::key::Signature;
 
     use crate::protocol::jose::ProtectedHeader;
     use crate::protocol::jose::SignatureAlgorithm;
@@ -75,7 +74,7 @@ pub mod external {
     /// The token used to bind an external account based on a Key from
     /// the provider.
     #[derive(Debug, Serialize)]
-    pub struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Signature>);
+    pub struct ExternalAccountToken(SignedToken<Jwk, ExternalAccountId, Box<[u8]>>);
 
     // Create alias for HMAC-SHA256
     type HmacSha256 = hmac::Hmac<sha2::Sha256>;

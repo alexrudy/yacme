@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let account = provider
         .account(key)
         .add_contact_email("hello@example.test")?
+        .agree_to_terms_of_service()
         .create()
         .await?;
 

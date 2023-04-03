@@ -9,8 +9,7 @@ use crate::key::SigningKey;
 use crate::protocol::Base64Data;
 use chrono::{DateTime, Utc};
 use der::Decode;
-use der::Encode;
-use ouroboros::self_referencing;
+use der::EncodePem;
 use pem_rfc7468::PemLabel;
 use serde::{Deserialize, Serialize};
 
@@ -148,6 +147,12 @@ impl FinalizeOrder {
         }
         let signed_csr = csr.sign(key);
 
+        #[cfg(all(feature = "trace-requests", not(docs)))]
+        {
+            let doc = signed_csr.to_pem();
+            tracing::trace!("CSR: {}", doc);
+        }
+
         signed_csr.into()
     }
 }
@@ -159,48 +164,34 @@ impl From<SignedCertificateRequest> for FinalizeOrder {
 }
 
 /// A chain of certificates, returned when an order is successful.
-#[self_referencing]
 pub struct CertificateChain {
-    data: Vec<Vec<u8>>,
-    #[borrows(data)]
-    #[covariant]
-    chain: Vec<x509_cert::Certificate<'this>>,
+    chain: Vec<x509_cert::Certificate>,
 }
 
 impl CertificateChain {
     /// Try to create a new certificate chain from a list of DER encoded documents.
     pub fn try_from_der(documents: Vec<Vec<u8>>) -> Result<Self, AcmeError> {
-        Ok(CertificateChainTryBuilder {
-            data: documents,
-            chain_builder: |documents: &Vec<Vec<u8>>| {
-                documents
-                    .iter()
-                    .map(|doc| x509_cert::Certificate::from_der(doc))
-                    .collect::<Result<Vec<_>, der::Error>>()
-            },
-        }
-        .try_build()?)
+        Ok(CertificateChain {
+            chain: documents
+                .iter()
+                .map(|doc| x509_cert::Certificate::from_der(doc))
+                .collect::<Result<Vec<_>, der::Error>>()?,
+        })
     }
 
     /// The certificate chain
     pub fn chain(&self) -> &[x509_cert::Certificate] {
-        self.borrow_chain()
+        &self.chain
     }
 
     /// Create a list of PEM documents representing the certificate chain.
     pub fn to_pem_documents(&self) -> Result<Vec<String>, AcmeError> {
         let docs = self
-            .borrow_chain()
+            .chain
             .iter()
             .map(|cert| {
-                cert.to_vec().map_err(AcmeError::from).and_then(|doc| {
-                    pem_rfc7468::encode_string(
-                        x509_cert::Certificate::PEM_LABEL,
-                        base64ct::LineEnding::LF,
-                        &doc,
-                    )
+                cert.to_pem(base64ct::LineEnding::default())
                     .map_err(AcmeError::from)
-                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(docs)
@@ -227,17 +218,12 @@ impl crate::protocol::response::Decode for CertificateChain {
             })
             .collect::<Result<Vec<_>, pem_rfc7468::Error>>()?;
 
-        CertificateChainTryBuilder {
-            data: documents,
-            chain_builder: |documents: &Vec<Vec<u8>>| {
-                documents
-                    .iter()
-                    .map(|doc| x509_cert::Certificate::from_der(doc))
-                    .collect::<Result<Vec<_>, der::Error>>()
-            },
-        }
-        .try_build()
-        .map_err(AcmeError::from)
+        Ok(CertificateChain {
+            chain: documents
+                .iter()
+                .map(|doc| x509_cert::Certificate::from_der(doc))
+                .collect::<Result<Vec<_>, der::Error>>()?,
+        })
     }
 }
 

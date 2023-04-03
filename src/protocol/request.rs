@@ -37,7 +37,7 @@
 use std::fmt::Write;
 use std::{ops::Deref, sync::Arc};
 
-use crate::key::{Signature, SigningKey};
+use crate::key::SigningKey;
 use serde::Serialize;
 
 use super::fmt::{self, HttpCase};
@@ -279,7 +279,7 @@ where
     fn signed_token(
         &self,
         nonce: Nonce,
-    ) -> Result<SignedToken<&T, &AccountKeyIdentifier, Signature>, AcmeError> {
+    ) -> Result<SignedToken<&T, &AccountKeyIdentifier, Box<[u8]>>, AcmeError> {
         let header = self.key.header(self.url.clone(), nonce);
         let key = self.key.key();
 

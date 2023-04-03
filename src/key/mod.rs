@@ -21,13 +21,48 @@ pub use self::ecdsa::EcdsaAlgorithm;
 
 pub use p256;
 pub use pkcs8;
+use pkcs8::EncodePublicKey;
 pub use signature;
 
+#[derive(Debug)]
+enum InnerSignature {
+    Ecdsa(self::ecdsa::EcdsaSignature),
+}
+
+impl From<self::ecdsa::EcdsaSignature> for Signature {
+    fn from(value: self::ecdsa::EcdsaSignature) -> Self {
+        Signature(InnerSignature::Ecdsa(value))
+    }
+}
+
+impl InnerSignature {
+    fn to_der(&self) -> der::Document {
+        match self {
+            InnerSignature::Ecdsa(sig) => sig.to_der(),
+        }
+    }
+
+    fn to_bytes(&self) -> Box<[u8]> {
+        match self {
+            InnerSignature::Ecdsa(sig) => sig.to_bytes(),
+        }
+    }
+}
+
 /// A signature, produced by signing a key over a message.
-///
-/// Interally, just bytes which must be encoded in some fashion
-/// for use.
-pub struct Signature(Vec<u8>);
+pub struct Signature(InnerSignature);
+
+impl Signature {
+    /// Convert this signature to the underlying raw bytes.
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        self.0.to_bytes()
+    }
+
+    /// Encode this signature in ASN.1 DER format.
+    pub fn to_der(&self) -> der::Document {
+        self.0.to_der()
+    }
+}
 
 impl fmt::Debug for Signature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -35,15 +70,9 @@ impl fmt::Debug for Signature {
     }
 }
 
-impl AsRef<[u8]> for Signature {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-
-impl From<Vec<u8>> for Signature {
-    fn from(value: Vec<u8>) -> Self {
-        Signature(value)
+impl From<Signature> for Vec<u8> {
+    fn from(value: Signature) -> Self {
+        value.0.to_bytes().into()
     }
 }
 
@@ -62,7 +91,7 @@ impl PublicKey {
     }
 
     /// The pkcs8 algorithm identifier for this key.
-    pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+    pub fn algorithm(&self) -> spki::AlgorithmIdentifierOwned {
         self.0.algorithm()
     }
 
@@ -98,6 +127,12 @@ impl fmt::Debug for PublicKey {
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         todo!("PublicKey to bytes")
+    }
+}
+
+impl EncodePublicKey for PublicKey {
+    fn to_public_key_der(&self) -> pkcs8::spki::Result<der::Document> {
+        self.0.to_public_key_der()
     }
 }
 
@@ -180,7 +215,7 @@ impl SigningKey {
     }
 
     /// The pkcs8 algorithm identifier for this key.
-    pub fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+    pub fn algorithm(&self) -> spki::AlgorithmIdentifierOwned {
         self.0.algorithm()
     }
 }
@@ -203,6 +238,16 @@ impl signature::DigestSigner<sha2::Sha256, Signature> for SigningKey {
     }
 }
 
+impl signature::RandomizedDigestSigner<sha2::Sha256, Signature> for SigningKey {
+    fn try_sign_digest_with_rng(
+        &self,
+        rng: &mut impl signature::rand_core::CryptoRngCore,
+        digest: sha2::Sha256,
+    ) -> Result<Signature, ::ecdsa::Error> {
+        self.0.try_sign_digest_with_rng(rng, digest)
+    }
+}
+
 pub(crate) enum InnerSigningKey {
     Ecdsa(Box<dyn SigningKeyAlgorithm + Send + Sync>),
     //TODO: Consider supporting other algorithms?
@@ -221,7 +266,7 @@ impl InnerSigningKey {
         }
     }
 
-    pub(crate) fn algorithm(&self) -> pkcs8::AlgorithmIdentifier {
+    pub(crate) fn algorithm(&self) -> spki::AlgorithmIdentifierOwned {
         match self {
             InnerSigningKey::Ecdsa(ecdsa) => ecdsa.algorithm(),
         }
@@ -265,6 +310,17 @@ impl signature::DigestSigner<sha2::Sha256, Signature> for InnerSigningKey {
         }
     }
 }
+impl signature::RandomizedDigestSigner<sha2::Sha256, Signature> for InnerSigningKey {
+    fn try_sign_digest_with_rng(
+        &self,
+        _rng: &mut impl signature::rand_core::CryptoRngCore,
+        digest: sha2::Sha256,
+    ) -> Result<Signature, ::ecdsa::Error> {
+        match self {
+            InnerSigningKey::Ecdsa(key) => key.try_sign_digest_with_rng(digest),
+        }
+    }
+}
 
 impl fmt::Debug for InnerSigningKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -278,15 +334,17 @@ pub(crate) trait SigningKeyAlgorithm: signature::Signer<Signature> {
     fn as_jwk(&self) -> self::jwk::Jwk;
     fn public_key(&self) -> PublicKey;
     fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error>;
-    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
+    fn try_sign_digest_with_rng(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error>;
+    fn algorithm(&self) -> spki::AlgorithmIdentifierOwned;
     fn kind(&self) -> SignatureKind;
     fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument>;
 }
 
 pub(crate) trait PublicKeyAlgorithm {
     fn as_jwk(&self) -> self::jwk::Jwk;
-    fn algorithm(&self) -> pkcs8::AlgorithmIdentifier;
+    fn algorithm(&self) -> spki::AlgorithmIdentifierOwned;
     fn as_bytes(&self) -> Vec<u8>;
+    fn to_public_key_der(&self) -> pkcs8::spki::Result<der::Document>;
 }
 
 #[cfg(test)]
