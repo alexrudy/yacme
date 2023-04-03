@@ -228,7 +228,7 @@ impl ser::Serialize for Contacts {
 }
 
 /// Account information provided by an ACME service provider.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     /// The status of the account - valid, deactivated, or revoked.
@@ -256,7 +256,7 @@ pub struct Account {
 ///    request.  If the account is deactivated by the client or revoked by
 ///    the server, it moves to the corresponding state.
 ///
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountStatus {
     /// Account objects are created in the valid state.
