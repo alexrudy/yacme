@@ -4,11 +4,11 @@ use std::fmt;
 
 use const_oid::AssociatedOid;
 use der::{
-    asn1::{BitStringRef, Ia5StringRef, SetOfVec},
+    asn1::{Ia5StringRef, SetOfVec},
     Encode, FixedTag,
 };
 use sha2::Digest;
-use signature::DigestSigner;
+use signature::{rand_core::OsRng, RandomizedDigestSigner};
 use x509_cert::ext::pkix;
 
 use super::SigningKey;
@@ -92,12 +92,25 @@ impl CertificateSigningRequest {
     pub fn sign(self, key: &SigningKey) -> SignedCertificateRequest {
         // CSR needs the public key info to know who signed it.
         let public_key = key.public_key();
-        let subject_public_key = public_key.as_bytes();
-        let algorithm = public_key.algorithm();
-        let public_key = pkcs8::SubjectPublicKeyInfo {
-            algorithm,
-            subject_public_key: &subject_public_key,
+        // let algorithm = public_key.algorithm();
+
+        // let spki_public_key_data = {
+        //     let mut buf = Vec::with_capacity(public_key.as_bytes().len() + 1);
+        //     BitStringRef::from_bytes(&public_key.as_bytes())
+        //         .unwrap()
+        //         .encode_to_vec(&mut buf)
+        //         .unwrap();
+        //     buf
+        // };
+
+        let bytes = public_key.as_bytes();
+
+        let spki = spki::SubjectPublicKeyInfoOwned {
+            algorithm: public_key.algorithm(),
+            subject_public_key: der::asn1::BitString::from_bytes(&bytes).unwrap(),
         };
+
+        // let spki = pkcs8::SubjectPublicKeyInfo::try_from(spki_document.as_bytes()).unwrap();
 
         // CSR needs a list of Subject Alternative Names as GeneralName entries
         // with DNS specified.
@@ -106,14 +119,17 @@ impl CertificateSigningRequest {
             .iter()
             .map(|san| match san {
                 RequestedSubjectName::Dns(dns) => pkix::name::GeneralName::DnsName(
-                    Ia5StringRef::new(dns.as_bytes()).expect("ia-5 DNS valid names"),
+                    Ia5StringRef::new(dns.as_bytes())
+                        .expect("ia-5 DNS valid names")
+                        .into(),
                 ),
             })
             .collect();
 
         // Encode the SubjectAltNames using ASN.1 DER
+
         let san = pkix::SubjectAltName::from(san_names)
-            .to_vec()
+            .to_der()
             .expect("DER encoded SAN");
 
         // Set up an X.509 extension with the SAN, and mark it as critical
@@ -122,15 +138,15 @@ impl CertificateSigningRequest {
         let extension = x509_cert::ext::Extension {
             extn_id: pkix::SubjectAltName::OID,
             critical: true,
-            extn_value: &san,
+            extn_value: der::asn1::OctetString::new(san).unwrap(),
         };
 
         // Encode the extension using ASN.1 DER
-        let extension_der = extension.to_vec().unwrap();
+        let extension_der = extension.to_der().unwrap();
 
         // Add a tagged Extesnion value
         let encoded_extensions =
-            der::asn1::AnyRef::new(x509_cert::ext::Extension::TAG, &extension_der).unwrap();
+            der::asn1::Any::new(x509_cert::ext::Extension::TAG, extension_der).unwrap();
 
         // Include the extension value in the set of extensions to be included
         // with the X.509 attribute
@@ -150,22 +166,23 @@ impl CertificateSigningRequest {
         let csr_info = x509_cert::request::CertReqInfo {
             version: x509_cert::request::Version::V1,
             subject: Default::default(),
-            public_key,
+            public_key: spki,
             attributes,
         };
 
         // Digest sign the CSR target
-        let csr_target = csr_info.to_vec().expect("Valid encoding");
+        let csr_target = csr_info.to_der().expect("Valid encoding");
         let mut digest = sha2::Sha256::new();
         digest.update(&csr_target);
 
-        let signature = key.sign_digest(digest);
+        let signature = key.sign_digest_with_rng(&mut OsRng, digest);
 
         // Create the final CSR, containing in the info and the signature.
         let csr = x509_cert::request::CertReq {
             info: csr_info,
             algorithm: key.algorithm(),
-            signature: BitStringRef::new(0, signature.as_ref()).expect("valid signature"),
+            signature: der::asn1::BitString::new(0, signature.to_der().as_bytes())
+                .expect("valid signature"),
         };
 
         let mut buf = Vec::new();
@@ -182,7 +199,7 @@ pub struct SignedCertificateRequest(Vec<u8>);
 impl SignedCertificateRequest {
     /// Encode this CSR as a PEM document.
     pub fn to_pem(&self) -> String {
-        pem_rfc7468::encode_string(PEM_TAG_CSR, base64ct::LineEnding::LF, &self.0)
+        pem_rfc7468::encode_string(PEM_TAG_CSR, base64ct::LineEnding::default(), &self.0)
             .expect("valid PEM")
     }
 }
@@ -195,32 +212,24 @@ impl AsRef<[u8]> for SignedCertificateRequest {
 
 #[cfg(test)]
 mod test {
-    use crate::key;
+    use der::Decode;
+
+    use crate::key::SignatureKind;
 
     use super::*;
 
     #[test]
-    fn create_csr() {
-        let key = key!("ec-p255");
+    fn csr_signature_is_der() {
+        let key = SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256).random();
 
         let mut csr = CertificateSigningRequest::new();
-        csr.push("www.example.org");
-        csr.push("internal.example.org");
-        let csr_signed = csr.sign(&key);
+        csr.push("example.com");
 
-        let openssl_csr_pem = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/csr/example.csr"
-        ));
+        let signed = csr.sign(&key);
 
-        let (label, openssl_csr_der) = pem_rfc7468::decode_vec(openssl_csr_pem.as_bytes()).unwrap();
-        assert_eq!(label, PEM_TAG_CSR);
+        let csr = x509_cert::request::CertReq::from_der(signed.as_ref()).expect("valid CSR");
 
-        let openssl_csr: x509_cert::request::CertReq =
-            x509_cert::request::CertReq::try_from(openssl_csr_der.as_slice()).unwrap();
-
-        eprintln!("{:#?}", openssl_csr);
-
-        assert_eq!(csr_signed.to_pem(), openssl_csr_pem);
+        let doc = csr.signature.as_bytes().unwrap();
+        let _ = der::Document::from_der(doc).expect("valid DER");
     }
 }

@@ -307,7 +307,7 @@ where
     }
 
     /// Sign this token with the given cryptographic key.
-    pub fn sign<K>(self, key: &K) -> Result<SignedToken<P, KI, Signature>, SigningError>
+    pub fn sign<K>(self, key: &K) -> Result<SignedToken<P, KI, Box<[u8]>>, SigningError>
     where
         K: signature::Signer<Signature>,
     {
@@ -315,7 +315,7 @@ where
         let signature = key.try_sign(message.as_bytes())?;
         Ok(SignedToken {
             target: self,
-            signature: signature.into(),
+            signature: signature.to_bytes().into(),
         })
     }
 
@@ -324,13 +324,13 @@ where
     pub fn digest<D: signature::digest::Mac>(
         self,
         mut digest: D,
-    ) -> Result<SignedToken<P, KI, Signature>, SigningError> {
+    ) -> Result<SignedToken<P, KI, Box<[u8]>>, SigningError> {
         let message = self.signing_input()?;
         digest.update(message.as_bytes());
         let result = digest.finalize();
         Ok(SignedToken {
             target: self,
-            signature: Signature::from(result.into_bytes().to_vec()).into(),
+            signature: Base64Data(Box::from(result.into_bytes().to_vec())),
         })
     }
 }
