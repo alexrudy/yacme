@@ -38,6 +38,7 @@ use std::fmt::Write;
 use std::{ops::Deref, sync::Arc};
 
 use crate::key::SigningKey;
+use http::HeaderMap;
 use serde::Serialize;
 
 use super::fmt::{self, HttpCase};
@@ -221,11 +222,17 @@ pub struct Request<T> {
     method: Method<T>,
     url: Url,
     key: Key,
+    headers: HeaderMap,
 }
 
 impl<T> Request<T> {
     fn new(method: Method<T>, url: Url, key: Key) -> Self {
-        Self { method, url, key }
+        Self {
+            method,
+            url,
+            key,
+            headers: Default::default(),
+        }
     }
 
     /// Create a `POST` request with a given payload.
@@ -237,6 +244,16 @@ impl<T> Request<T> {
     /// also required.
     pub fn post<K: Into<Key>>(payload: T, url: Url, key: K) -> Self {
         Self::new(Method::Post(payload), url, key.into())
+    }
+
+    /// Mutable reference to the headers to be sent by this request.
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
+    /// Inspect the headers to be sent with this request.
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
     }
 
     /// Alter the URL on this request to a new value.
@@ -295,6 +312,7 @@ where
     pub fn sign(&self, nonce: Nonce) -> Result<SignedRequest, AcmeError> {
         let signed_token = self.signed_token(nonce)?;
         let mut request = reqwest::Request::new(http::Method::POST, self.url.clone().into());
+        *request.headers_mut() = self.headers.clone();
         request
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, CONTENT_JOSE.parse().unwrap());
@@ -472,6 +490,31 @@ mod test {
         assert_eq!(
             header.formatted().to_string(),
             crate::example!("header-id.txt").trim()
+        );
+    }
+
+    #[test]
+    fn request_has_headers() {
+        let key = crate::key!("ec-p255");
+        let identifier = AccountKeyIdentifier::from(
+            "https://letsencrypt.test/account/foo-bar"
+                .parse::<Url>()
+                .unwrap(),
+        );
+        let url = "https://letsencrypt.test/new-orderz"
+            .parse::<Url>()
+            .unwrap();
+
+        let mut request = Request::get(url, (key, Some(identifier)));
+        request
+            .headers_mut()
+            .insert("X-Foo", "bar".parse().unwrap());
+
+        let signed = request.sign("foo".into()).unwrap();
+        assert_eq!(signed.0.headers().get("X-Foo").unwrap(), "bar");
+        assert_eq!(
+            signed.0.headers().get("Content-Type").unwrap(),
+            "application/jose+json"
         );
     }
 }
