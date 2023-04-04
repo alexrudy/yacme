@@ -200,7 +200,7 @@ impl CertificateChain {
 
 impl crate::protocol::response::Decode for CertificateChain {
     fn decode(data: &[u8]) -> Result<Self, AcmeError> {
-        let documents_text = std::str::from_utf8(data)?;
+        let documents_text = std::str::from_utf8(data)?.trim();
 
         let documents = documents_text
             .split(PEM_DOCUMENT_BEGIN)
@@ -210,7 +210,7 @@ impl crate::protocol::response::Decode for CertificateChain {
                 doc.push_str(PEM_DOCUMENT_BEGIN);
                 doc.push_str(doc_part);
 
-                let (label, data) = pem_rfc7468::decode_vec(doc.as_bytes())?;
+                let (label, data) = pem_rfc7468::decode_vec(doc.trim().as_bytes())?;
                 if label != x509_cert::Certificate::PEM_LABEL {
                     return Err(pem_rfc7468::Error::Label);
                 }
