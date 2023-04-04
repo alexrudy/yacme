@@ -57,6 +57,12 @@ impl From<String> for Nonce {
     }
 }
 
+impl From<&str> for Nonce {
+    fn from(value: &str) -> Self {
+        Nonce(value.to_string())
+    }
+}
+
 /// Identifier used by ACME servers for registered accounts
 ///
 /// Internally, RFC 8885 specifies that this should be the `GET` resource URL

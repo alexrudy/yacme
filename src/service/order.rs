@@ -16,6 +16,8 @@ use chrono::{DateTime, Utc};
 
 use super::{account::Account, authorization::Authorization, client::Client};
 
+const CONTENT_PEM_CHAIN: &str = "application/pem-certificate-chain";
+
 /// Order for a certificate for a set of identifiers.
 #[derive(Debug)]
 pub struct Order<'a> {
@@ -173,7 +175,11 @@ impl<'a> Order<'a> {
         let order_info = &self.data;
         let Some(url) = order_info.certificate() else { return Err(AcmeError::NotReady("certificate")) };
 
-        let request = Request::get(url.clone(), self.account().request_key());
+        let mut request = Request::get(url.clone(), self.account().request_key());
+
+        request
+            .headers_mut()
+            .insert(http::header::ACCEPT, CONTENT_PEM_CHAIN.parse().unwrap());
         let certificate: Response<CertificateChain> = self.client().execute(request).await?;
 
         Ok(certificate.into_inner())

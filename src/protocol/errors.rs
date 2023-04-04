@@ -26,7 +26,7 @@ pub enum AcmeError {
     JsonSerialize(#[source] serde_json::Error),
 
     /// An error occured while trying decode a PEM binary in a response.
-    #[error("An error occured while deserializing a PEM binary: {0}")]
+    #[error("An error occured while deserializing a PEM document: {0}")]
     PemDecodeError(#[from] pem_rfc7468::Error),
 
     /// An error occured while trying decode a DER binary in a response.
