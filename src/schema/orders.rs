@@ -200,11 +200,11 @@ impl CertificateChain {
 
 impl crate::protocol::response::Decode for CertificateChain {
     fn decode(data: &[u8]) -> Result<Self, AcmeError> {
-        let documents = std::str::from_utf8(data)?;
+        let documents_text = std::str::from_utf8(data)?;
 
-        let documents = documents
+        let documents = documents_text
             .split(PEM_DOCUMENT_BEGIN)
-            .filter(|doc| !doc.is_empty())
+            .filter(|doc| !doc.trim().is_empty())
             .map(|doc_part| {
                 let mut doc = String::new();
                 doc.push_str(PEM_DOCUMENT_BEGIN);
@@ -216,13 +216,29 @@ impl crate::protocol::response::Decode for CertificateChain {
                 }
                 Ok(data)
             })
-            .collect::<Result<Vec<_>, pem_rfc7468::Error>>()?;
+            .collect::<Result<Vec<_>, pem_rfc7468::Error>>()
+            .map_err(|err| {
+                tracing::error!(
+                    "Error {} decoding certificate chain {}",
+                    err,
+                    documents_text
+                );
+                err
+            })?;
 
         Ok(CertificateChain {
             chain: documents
                 .iter()
                 .map(|doc| x509_cert::Certificate::from_der(doc))
-                .collect::<Result<Vec<_>, der::Error>>()?,
+                .collect::<Result<Vec<_>, der::Error>>()
+                .map_err(|err| {
+                    tracing::error!(
+                        "Error {} decoding certificate chain as DER: {}",
+                        err,
+                        documents_text
+                    );
+                    err
+                })?,
         })
     }
 }
