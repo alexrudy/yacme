@@ -6,8 +6,27 @@ authors = ["Alex Rudy <opensource@alexrudy.net>"]
 license = "MIT"
 repository = "https://github.com/alexrudy/yacme"
 description = "Yet another ACME client."
-categories = ["asynchronous", "network-programming", "cryptography"]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+keywords = [
+    "async",
+    "api",
+    "acme",
+    "crypto",
+    "http",
+    "https",
+    "protocol",
+    "networking",
+    "utility",
+    "library",
+    "tcp",
+    "tls",
+]
+categories = [
+    "API Bindings",
+    "Asynchronous",
+    "Cryptography",
+    "Network Programming",
+    "Web Programming",
+]
 
 [dependencies]
 arc-swap = "1.6.0"
