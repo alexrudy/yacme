@@ -8,11 +8,10 @@ repository = "https://github.com/alexrudy/yacme"
 description = "Yet another ACME client."
 keywords = ["async", "acme", "https", "networking", "tls"]
 categories = [
-    "API Bindings",
-    "Asynchronous",
-    "Cryptography",
-    "Network Programming",
-    "Web Programming",
+    "api-bindings",
+    "cryptography",
+    "network-programming",
+    "web-programming::http-server",
 ]
 
 [dependencies]
