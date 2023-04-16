@@ -6,20 +6,7 @@ authors = ["Alex Rudy <opensource@alexrudy.net>"]
 license = "MIT"
 repository = "https://github.com/alexrudy/yacme"
 description = "Yet another ACME client."
-keywords = [
-    "async",
-    "api",
-    "acme",
-    "crypto",
-    "http",
-    "https",
-    "protocol",
-    "networking",
-    "utility",
-    "library",
-    "tcp",
-    "tls",
-]
+keywords = ["async", "acme", "https", "networking", "tls"]
 categories = [
     "API Bindings",
     "Asynchronous",
