@@ -9,7 +9,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use yacme::key::SignatureKind;
+use signature::rand_core::OsRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
@@ -32,7 +32,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+    let key = Arc::new(p256::SecretKey::random(&mut OsRng));
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -75,7 +75,10 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         pebble
-            .http01(inner.token(), inner.authorization(&account.key()).deref())
+            .http01(
+                inner.token(),
+                inner.authorization(account.key().deref()).deref(),
+            )
             .await;
 
         chall.ready().await?;
@@ -85,9 +88,9 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
-
-    let cert = order.finalize_and_download(&certificate_key).await?;
+    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let cert = order.finalize_and_download(&signer).await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
@@ -189,7 +192,7 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+    let key = Arc::new(p256::SecretKey::random(&mut OsRng));
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -234,7 +237,7 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
         pebble
             .dns01(
                 &inner.record(&auth.identifier().to_string()),
-                inner.digest(&account.key()).deref(),
+                inner.digest(account.key().deref()).deref(),
             )
             .await;
 
@@ -245,10 +248,9 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
-
-    let cert = order.finalize_and_download(&certificate_key).await?;
-
+    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let cert = order.finalize_and_download(&signer).await?;
     println!("{}", cert.to_pem_documents()?.join(""));
 
     pebble.down();

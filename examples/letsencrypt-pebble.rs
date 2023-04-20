@@ -11,8 +11,10 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use ecdsa::SigningKey;
+use pkcs8::DecodePrivateKey;
 use serde::Serialize;
-use yacme::key::{SignatureKind, SigningKey};
+use signature::rand_core::OsRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
 use yacme::service::Provider;
@@ -31,14 +33,10 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<p256::SecretKey> {
     let raw = read_string(path)?;
 
-    let key = yacme::key::SigningKey::from_pkcs8_pem(
-        &raw,
-        yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
-    )
-    .unwrap();
+    let key = p256::SecretKey::from_pkcs8_pem(&raw).unwrap();
 
     Ok(key)
 }
@@ -98,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .challenge(&ChallengeKind::Http01)
             .ok_or("No http01 challenge provided")?;
         let inner = chall.http01().unwrap();
-        http01_challenge_response(&inner, &account.key()).await?;
+        http01_challenge_response(&inner, &account.key().deref().into()).await?;
 
         chall.ready().await?;
         auth.finalize().await?;
@@ -107,9 +105,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
-
-    let cert = order.finalize_and_download(&key).await?;
+    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let cert = order.finalize_and_download(&signer).await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
@@ -119,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 // This method is specific to pebble - you would set up your challenge respons in an appropriate fashion
 async fn http01_challenge_response(
     challenge: &Http01Challenge,
-    key: &SigningKey,
+    key: &SigningKey<p256::NistP256>,
 ) -> Result<(), reqwest::Error> {
     #[derive(Debug, Serialize)]
     struct Http01ChallengeSetup {

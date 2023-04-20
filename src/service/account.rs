@@ -2,7 +2,9 @@
 //!
 use std::sync::Arc;
 
-use crate::key::SigningKey;
+use jaws::key::SerializeJWK;
+
+use crate::cert::KeyPair;
 use crate::protocol::{request::Key, AcmeError, Request, Response, Url};
 use crate::schema::{
     self,
@@ -19,15 +21,18 @@ use super::{
 ///
 /// Accounts are identified by their signing key.
 #[derive(Debug)]
-pub struct Account {
+pub struct Account<K> {
     provider: Provider,
-    key: Arc<SigningKey>,
+    key: Arc<K>,
     data: schema::Account,
     url: Url,
 }
 
-impl Account {
-    fn new(provider: Provider, key: Arc<SigningKey>, data: schema::Account, url: Url) -> Self {
+impl<K> Account<K>
+where
+    K: Clone,
+{
+    fn new(provider: Provider, key: Arc<K>, data: schema::Account, url: Url) -> Self {
         Self {
             provider,
             key,
@@ -47,7 +52,12 @@ impl Account {
     }
 
     /// Refresh this account's data from the ACME service
-    pub async fn refresh(&mut self) -> Result<(), AcmeError> {
+    pub async fn refresh(&mut self) -> Result<(), AcmeError>
+    where
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let response: Response<schema::Account> = self
             .client()
             .execute(Request::get(self.url().clone(), self.request_key()))
@@ -60,7 +70,7 @@ impl Account {
     /// Create an update request for an account.
     ///
     /// Update requests are built using the [`UpdateAccount`] builder.
-    pub fn update(&mut self) -> UpdateAccount {
+    pub fn update(&mut self) -> UpdateAccount<K> {
         UpdateAccount::new(self)
     }
 
@@ -70,7 +80,7 @@ impl Account {
     }
 
     /// Signing key which identifies this account
-    pub fn key(&self) -> Arc<SigningKey> {
+    pub fn key(&self) -> Arc<K> {
         self.key.clone()
     }
 
@@ -80,17 +90,23 @@ impl Account {
     }
 
     /// Key used for signing requests, including identifier
-    pub(crate) fn request_key(&self) -> impl Into<Key> {
+    pub(crate) fn request_key(&self) -> impl Into<Key<K>> {
         (self.key(), self.url.clone())
     }
 
     /// Create a new order for a certificate
-    pub fn order(&self) -> OrderBuilder {
+    pub fn order(&self) -> OrderBuilder<K> {
         OrderBuilder::new(self)
     }
 
     /// Get a list of orders associated with this account
-    pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order>, AcmeError> {
+    pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order<K>>, AcmeError>
+    where
+        K: Clone,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let orders = super::order::list(self, limit).await?;
 
         Ok(orders)
@@ -99,17 +115,20 @@ impl Account {
 
 /// Manage a request for a new or existing ACME account
 /// from an ACME provider.
-pub struct AccountBuilder {
+pub struct AccountBuilder<K> {
     contact: Contacts,
     terms_of_service_agreed: Option<bool>,
     only_return_existing: Option<bool>,
     external_account_binding: Option<ExternalAccountBindingRequest>,
-    key: Arc<SigningKey>,
+    key: Arc<K>,
     provider: Provider,
 }
 
-impl AccountBuilder {
-    pub(crate) fn new(provider: Provider, key: Arc<SigningKey>) -> Self {
+impl<K> AccountBuilder<K>
+where
+    K: KeyPair + Clone,
+{
+    pub(crate) fn new(provider: Provider, key: Arc<K>) -> Self {
         AccountBuilder {
             contact: Default::default(),
             terms_of_service_agreed: None,
@@ -124,7 +143,7 @@ impl AccountBuilder {
     ///
     /// This allows accounts created with an ACME provider via their website to be linked
     /// to the automated accounts created during the ACME protocol.
-    pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder {
+    pub fn external_account(mut self, binding: ExternalAccountBindingRequest) -> AccountBuilder<K> {
         self.external_account_binding = Some(binding);
         self
     }
@@ -157,7 +176,14 @@ impl AccountBuilder {
     ///
     /// The request is sent as a [`CreateAccount`].
     /// If [`AccountBuilder::must_exist`] is set, this method acts like [`AccountBuilder::get`].
-    pub async fn create(self) -> Result<Account, AcmeError> {
+    pub async fn create(self) -> Result<Account<K>, AcmeError>
+    where
+        K: KeyPair,
+        K::PublicKey: SerializeJWK,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let url = self.provider.directory().new_account.clone();
         let public_key = self.key.public_key();
         let payload = CreateAccount {
@@ -190,7 +216,14 @@ impl AccountBuilder {
     /// Get an existing account.
     ///
     /// Uses `only_return_existing`, overriding the value set by [`AccountBuilder::must_exist`].
-    pub async fn get(mut self) -> Result<Account, AcmeError> {
+    pub async fn get(mut self) -> Result<Account<K>, AcmeError>
+    where
+        K: KeyPair,
+        K::PublicKey: SerializeJWK,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         self.only_return_existing = Some(true);
         self.create().await
     }
@@ -198,13 +231,16 @@ impl AccountBuilder {
 
 /// Update the contacts associated with an account
 #[derive(Debug)]
-pub struct UpdateAccount<'a> {
+pub struct UpdateAccount<'a, K> {
     contact: Contacts,
-    account: &'a mut Account,
+    account: &'a mut Account<K>,
 }
 
-impl<'a> UpdateAccount<'a> {
-    fn new(account: &'a mut Account) -> Self {
+impl<'a, K> UpdateAccount<'a, K>
+where
+    K: Clone,
+{
+    fn new(account: &'a mut Account<K>) -> Self {
         UpdateAccount {
             contact: account.data().contact.clone(),
             account,
@@ -218,7 +254,12 @@ impl<'a> UpdateAccount<'a> {
     }
 
     /// Update account information with the ACME provider.
-    pub async fn update(self) -> Result<(), AcmeError> {
+    pub async fn update(self) -> Result<(), AcmeError>
+    where
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let url = self.account.url().clone();
         let key = self.account.key.clone();
         let request = crate::schema::account::UpdateAccount::new(self.contact);

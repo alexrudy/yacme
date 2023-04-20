@@ -10,7 +10,7 @@ use super::Request;
 use super::Url;
 
 #[cfg(feature = "trace-requests")]
-use super::fmt::AcmeFormat;
+use jaws::fmt::JWTFormat;
 
 #[cfg(feature = "trace-requests")]
 use super::request::Encode;
@@ -156,10 +156,16 @@ impl Client {
     /// Request payloads must be serializable, and request responses must implement [`Decode`].
     /// `Decode` is implemented for all types that implement [`serde::Deserialize`].
     #[cfg(any(not(feature = "trace-requests"), docs))]
-    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    pub async fn execute<P, K, R>(
+        &mut self,
+        request: Request<P, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: Decode,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         Response::from_decoded_response(self.execute_internal(request).await?).await
     }
@@ -169,10 +175,16 @@ impl Client {
     /// Tracing is done using the [RFC 8885](https://tools.ietf.org/html/rfc8885) format,
     /// via the `tracing` crate, at the `trace` level.
     #[cfg(all(feature = "trace-requests", not(docs)))]
-    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    pub async fn execute<P, K, R>(
+        &mut self,
+        request: Request<P, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: Decode + Encode,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
@@ -184,12 +196,15 @@ impl Client {
     }
 
     #[inline]
-    async fn execute_internal<P>(
+    async fn execute_internal<P, K>(
         &mut self,
-        request: Request<P>,
+        request: Request<P, K>,
     ) -> Result<reqwest::Response, AcmeError>
     where
         P: Serialize,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         let mut nonce = self.get_nonce().await?;
         loop {

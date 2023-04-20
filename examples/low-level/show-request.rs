@@ -2,9 +2,10 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::sync::Arc;
 
+use jaws::JWTFormat;
+use pkcs8::DecodePrivateKey;
 use reqwest::Certificate;
 use reqwest::Url;
-use yacme::protocol::fmt::AcmeFormat;
 use yacme::protocol::{Client, Request};
 use yacme::schema::account::{Contacts, CreateAccount};
 use yacme::schema::directory::Directory;
@@ -26,14 +27,10 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<p256::SecretKey> {
     let raw = read_string(path)?;
 
-    let key = yacme::key::SigningKey::from_pkcs8_pem(
-        &raw,
-        yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
-    )
-    .unwrap();
+    let key = p256::SecretKey::from_pkcs8_pem(&raw).unwrap();
 
     Ok(key)
 }
@@ -92,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let account_request = Request::post(payload, directory.new_account.clone(), key.clone());
     println!("{}", account_request.as_signed().formatted());
 
-    let account = client.execute::<_, Account>(account_request).await?;
+    let account = client.execute::<_, _, Account>(account_request).await?;
     println!("{}", account.formatted());
 
     Ok(())

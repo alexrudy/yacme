@@ -5,7 +5,6 @@
 
 use std::ops::Deref;
 
-use crate::key::SigningKey;
 use base64ct::Encoding;
 use chrono::{DateTime, Utc};
 use serde::ser::SerializeMap;
@@ -168,8 +167,11 @@ impl From<&Challenge> for ChallengeKind {
 pub struct KeyAuthorization(String);
 
 impl KeyAuthorization {
-    fn new(token: &str, key: &crate::key::SigningKey) -> KeyAuthorization {
-        let thumb = key.public_key().to_jwk().thumbprint();
+    fn new<K>(token: &str, key: &K) -> KeyAuthorization
+    where
+        K: jaws::key::SerializeJWK,
+    {
+        let thumb = jaws::key::Thumbprinter::<sha2::Sha256, _>::new(key).thumbprint();
         KeyAuthorization(format!("{token}.{thumb}"))
     }
 }
@@ -211,7 +213,10 @@ impl Http01Challenge {
     }
 
     /// Get the key authorization, used to validate the challenge.
-    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+    pub fn authorization<K>(&self, account_key: &K) -> KeyAuthorization
+    where
+        K: jaws::key::SerializeJWK,
+    {
         KeyAuthorization::new(&self.token, account_key)
     }
 
@@ -265,13 +270,19 @@ impl Dns01Challenge {
     }
 
     /// The value of the DNS TXT record that should be created.
-    pub fn digest(&self, account_key: &SigningKey) -> String {
+    pub fn digest<K>(&self, account_key: &K) -> String
+    where
+        K: jaws::key::SerializeJWK,
+    {
         let digest = sha2::Sha256::digest(self.authorization(account_key).as_bytes());
         base64ct::Base64UrlUnpadded::encode_string(&digest)
     }
 
     /// The key authorization object for this challenge.
-    pub fn authorization(&self, account_key: &SigningKey) -> KeyAuthorization {
+    pub fn authorization<K>(&self, account_key: &K) -> KeyAuthorization
+    where
+        K: jaws::key::SerializeJWK,
+    {
         KeyAuthorization::new(&self.token, account_key)
     }
 }

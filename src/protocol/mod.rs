@@ -11,19 +11,17 @@
 use std::ops::Deref;
 use std::str::FromStr;
 
-mod base64;
 pub mod client;
 pub mod errors;
-#[allow(unsafe_code)]
 pub mod fmt;
 pub mod jose;
 pub mod request;
 pub mod response;
 
-pub use base64::Base64Data;
-pub use base64::Base64JSON;
 pub use client::Client;
 pub use errors::AcmeError;
+pub use jaws::b64data::Base64Data;
+pub use jaws::b64data::Base64JSON;
 
 #[doc(no_inline)]
 pub use request::Request;

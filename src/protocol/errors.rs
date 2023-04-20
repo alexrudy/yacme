@@ -105,6 +105,20 @@ impl From<AcmeErrorDocument> for AcmeError {
     }
 }
 
+impl<E> From<jaws::token::TokenSigningError<E>> for AcmeError
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn from(error: jaws::token::TokenSigningError<E>) -> Self {
+        match error {
+            jaws::token::TokenSigningError::Signing(error) => {
+                AcmeError::Signing(signature::Error::from_source(error))
+            }
+            jaws::token::TokenSigningError::Serialization(error) => AcmeError::JsonSerialize(error),
+        }
+    }
+}
+
 mod acme {
     use std::fmt;
 

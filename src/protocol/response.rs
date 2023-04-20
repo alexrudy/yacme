@@ -15,11 +15,13 @@ use chrono::{DateTime, Utc};
 use http::HeaderMap;
 use serde::de::DeserializeOwned;
 
-use super::fmt::{self, HttpCase};
+use super::fmt::HttpCase;
 use super::jose::Nonce;
 use super::request::Encode;
 use super::AcmeError;
 use super::Url;
+
+use jaws::fmt;
 
 /// Helper trait for any type which can be decoded from a
 /// response from an ACME server.
@@ -154,7 +156,7 @@ impl<T> Response<T> {
     }
 }
 
-impl<T> fmt::AcmeFormat for Response<T>
+impl<T> fmt::JWTFormat for Response<T>
 where
     T: Encode,
 {
