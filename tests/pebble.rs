@@ -97,6 +97,81 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn http01_failure() {
+    let _ = tracing_subscriber::fmt::try_init();
+    pebble_http01_failue().await.unwrap()
+}
+
+#[tracing::instrument("http01-failure")]
+async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
+    let pebble = yacme::pebble::Pebble::new();
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    let provider = Provider::build()
+        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .add_root_certificate(pebble.certificate())
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .await?;
+
+    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+
+    // Step 1: Get an account
+    tracing::info!("Requesting account");
+    let account = provider
+        .account(key)
+        .add_contact_email("hello@example.test")?
+        .agree_to_terms_of_service()
+        .create()
+        .await?;
+
+    tracing::trace!("Account: \n{account:#?}");
+    tracing::info!("Requesting order");
+
+    let order = account
+        .order()
+        .dns("www.example.test")
+        .dns("internal.example.test")
+        .create()
+        .await?;
+    tracing::trace!("Order: \n{order:#?}");
+
+    tracing::info!("Completing Authorizations");
+
+    for auth in order.authorizations().await?.iter_mut() {
+        tracing::info!("Authorizing {:?} with HTTP01", auth.identifier());
+        tracing::trace!("Authorization: \n{auth:#?}");
+
+        if !matches!(auth.data().status, AuthorizationStatus::Pending) {
+            continue;
+        }
+
+        let mut chall = auth
+            .challenge(&ChallengeKind::Http01)
+            .ok_or("Pebble did not provide an http-01 challenge")?;
+
+        let schema = chall.data();
+        let _ = match schema {
+            Challenge::Http01(inner) => inner,
+            _ => panic!("wat? didn't we just check the challenge type?"),
+        };
+
+        // pebble
+        //     .http01(inner.token(), inner.authorization(&account.key()).deref())
+        //     .await;
+
+        chall.ready().await?;
+        let error = auth.finalize().await.unwrap_err();
+        assert!(matches!(error, yacme::protocol::AcmeError::Acme(_)));
+        tracing::info!("Authorization finalized");
+    }
+
+    pebble.down();
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn dns01() {
     let _ = tracing_subscriber::fmt::try_init();
     pebble_dns01().await.unwrap()

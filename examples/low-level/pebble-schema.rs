@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let challenge = client
                 .execute::<_, Challenge>(Request::post(
-                    ChallengeReadyRequest::default(),
+                    ChallengeReadyRequest,
                     challenge.url(),
                     account_key.clone(),
                 ))
