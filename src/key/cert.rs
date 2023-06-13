@@ -151,7 +151,7 @@ impl CertificateSigningRequest {
         // Include the extension value in the set of extensions to be included
         // with the X.509 attribute
         let mut values = SetOfVec::new();
-        values.add(encoded_extensions).unwrap();
+        values.insert(encoded_extensions).unwrap();
 
         let attr = x509_cert::attr::Attribute {
             oid: const_oid::db::rfc5912::ID_EXTENSION_REQ,
@@ -160,7 +160,7 @@ impl CertificateSigningRequest {
 
         // Add the extension attribute as the only attribute attached to this CSR
         let mut attributes = SetOfVec::new();
-        attributes.add(attr).unwrap();
+        attributes.insert(attr).unwrap();
 
         // Create the CSR info, which will be signed once encoded in DER
         let csr_info = x509_cert::request::CertReqInfo {

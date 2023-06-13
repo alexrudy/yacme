@@ -5,6 +5,8 @@
 
 use crate::protocol::{AcmeError, Request, Response, Url};
 use crate::schema;
+use crate::schema::authorizations::AuthorizationStatus;
+use crate::schema::challenges::ChallengeStatus;
 use crate::schema::{
     authorizations::Authorization as AuthorizationSchema,
     challenges::{
@@ -92,6 +94,7 @@ impl<'o> Authorization<'o> {
     }
 
     /// Wait for this authorization to get finalized (i.e. all challenges have responses)
+    #[tracing::instrument(skip(self), level = "debug", fields(identifier = %self.data().identifier))]
     pub async fn finalize(&mut self) -> Result<(), AcmeError> {
         tracing::debug!("Polling authorization resource to check for status updates");
 
@@ -120,6 +123,18 @@ impl<'o> Authorization<'o> {
         }
 
         if !self.data().status.is_valid() {
+            if let Some(error) = self
+                .data()
+                .challenges
+                .iter()
+                .filter_map(|c| c.error())
+                .next()
+            {
+                tracing::error!("Authorization failed with challenge error: {:?}", error);
+                return Err(AcmeError::from(error.clone()));
+            };
+
+            // Fallback used if we can't find a specific error message to respond with.
             return Err(AcmeError::AuthorizationError(format!(
                 "{:?}",
                 self.data().status
@@ -186,7 +201,7 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
         tracing::trace!("POST to notify that challenge {} is ready", name);
 
         let request = Request::post(
-            ChallengeReadyRequest::default(),
+            ChallengeReadyRequest,
             self.url().clone(),
             self.account().request_key(),
         );
@@ -231,12 +246,28 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
                 .data;
             let auth = info.into_inner();
             tracing::trace!("Checking challenge {name}");
-            if chall.is_finished() {
-                tracing::debug!("Completed challenge {name}");
-                break;
+            match chall.status() {
+                Some(ChallengeStatus::Invalid) => {
+                    tracing::warn!(status=?chall.status(), "Challenge {name} is invalid");
+                    if let Some(error) = chall.error() {
+                        return Err(AcmeError::from(error.clone()));
+                    }
+                    return Err(AcmeError::NotReady("challenge"));
+                }
+                Some(ChallengeStatus::Valid) => {
+                    tracing::debug!("Completed challenge {name}");
+                    break;
+                }
+                None => {
+                    tracing::warn!("Unable to get status for challenge {name}");
+                }
+                _ => {}
             }
 
-            if auth.status.is_finished() {
+            if matches!(auth.status, AuthorizationStatus::Valid) {
+                tracing::warn!(status=?auth.status, "Authorization is finished.\nThe challenge is not marked as complete\nMaybe this challenge is orphaned, or the authorization has expired. Either way, not waiting any longer");
+                break;
+            } else if auth.status.is_finished() {
                 tracing::warn!(status=?auth.status, "Authorization is finished.\n Maybe this challenge is orphaned, or the authorization has expired. Either way, not waiting any longer");
                 break;
             }
