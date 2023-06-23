@@ -33,11 +33,11 @@ hmac = "0.12"
 http = "0.2"
 lazy_static = { version = "1", optional = true }
 mime = "0.3"
-ouroboros = { version = "0.15" }
+ouroboros = { version = "0.17" }
 p256 = { version = "0.13", features = ["pkcs8", "arithmetic", "jwk"] }
 pem-rfc7468 = { version = "0.7", features = ["std"] }
 pkcs8 = { version = "0.10", features = ["alloc", "pem"] }
-rsa = "0.8"
+rsa = "0.9"
 reqwest = { version = "0.11", features = [
     "rustls-tls",
     "json",
