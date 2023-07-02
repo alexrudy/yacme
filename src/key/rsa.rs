@@ -116,7 +116,7 @@ impl super::SigningKeyAlgorithm for RsaSigningKey {
     }
 
     fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
-        self.keypair.to_pkcs8_der().map(|d| d.into())
+        self.keypair.to_pkcs8_der()
     }
 
     #[allow(unused_variables)]
@@ -134,7 +134,7 @@ impl RsaSigningKey {
         data: &str,
         algorithm: RsaAlgorithm,
     ) -> Result<Self, pkcs8::Error> {
-        let key = ::rsa::RsaPrivateKey::from_pkcs8_der(data.as_bytes())?;
+        let key = ::rsa::RsaPrivateKey::from_pkcs8_pem(data)?;
         Ok(Self::new(algorithm, key))
     }
 }
