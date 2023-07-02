@@ -36,6 +36,7 @@ impl EcdsaSignature {
 
 /// Named elliptic curves supported by Yacme
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EcdsaAlgorithm {
     /// The NIST P-256 (a.k.a. secp256r1, prime256v1) elliptic curve.
     P256,

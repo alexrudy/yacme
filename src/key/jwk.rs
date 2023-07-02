@@ -3,6 +3,7 @@ use std::fmt;
 
 use base64ct::Encoding;
 use elliptic_curve::sec1::Coordinates;
+use rsa::traits::PublicKeyParts;
 use serde::ser::{self, SerializeStruct};
 use sha2::Digest;
 
@@ -48,6 +49,7 @@ impl Jwk {
 #[derive(Clone, PartialEq, Eq)]
 enum InnerJwk {
     EllipticCurve(elliptic_curve::JwkEcKey),
+    Rsa(::rsa::RsaPublicKey),
 }
 
 impl ser::Serialize for Jwk {
@@ -66,6 +68,19 @@ impl ser::Serialize for Jwk {
                 state.serialize_field("y", &base64ct::Base64UrlUnpadded::encode_string(y))?;
                 state.end()
             }
+            InnerJwk::Rsa(rsa) => {
+                let mut state = serializer.serialize_struct("Jwk", 3)?;
+                state.serialize_field(
+                    "e",
+                    &base64ct::Base64UrlUnpadded::encode_string(&rsa.e().to_bytes_le()),
+                )?;
+                state.serialize_field("kty", "RSA")?;
+                state.serialize_field(
+                    "n",
+                    &base64ct::Base64UrlUnpadded::encode_string(&rsa.n().to_bytes_le()),
+                )?;
+                state.end()
+            }
         }
     }
 }
@@ -73,5 +88,11 @@ impl ser::Serialize for Jwk {
 impl From<elliptic_curve::JwkEcKey> for Jwk {
     fn from(value: elliptic_curve::JwkEcKey) -> Self {
         Jwk(InnerJwk::EllipticCurve(value))
+    }
+}
+
+impl From<::rsa::RsaPublicKey> for Jwk {
+    fn from(value: ::rsa::RsaPublicKey) -> Self {
+        Jwk(InnerJwk::Rsa(value))
     }
 }

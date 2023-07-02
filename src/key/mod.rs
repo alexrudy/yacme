@@ -14,10 +14,11 @@ use std::fmt;
 pub mod cert;
 mod ecdsa;
 pub mod jwk;
+mod rsa;
 
-use self::ecdsa::EcdsaSigningKey;
+use self::{ecdsa::EcdsaSigningKey, rsa::RsaSigningKey};
 
-pub use self::ecdsa::EcdsaAlgorithm;
+pub use self::{ecdsa::EcdsaAlgorithm, rsa::RsaAlgorithm};
 
 pub use p256;
 pub use pkcs8;
@@ -27,6 +28,7 @@ pub use signature;
 #[derive(Debug)]
 enum InnerSignature {
     Ecdsa(self::ecdsa::EcdsaSignature),
+    Rsa(self::rsa::RsaSignature),
 }
 
 impl From<self::ecdsa::EcdsaSignature> for Signature {
@@ -35,16 +37,24 @@ impl From<self::ecdsa::EcdsaSignature> for Signature {
     }
 }
 
+impl From<self::rsa::RsaSignature> for Signature {
+    fn from(value: self::rsa::RsaSignature) -> Self {
+        Signature(InnerSignature::Rsa(value))
+    }
+}
+
 impl InnerSignature {
     fn to_der(&self) -> der::Document {
         match self {
             InnerSignature::Ecdsa(sig) => sig.to_der(),
+            InnerSignature::Rsa(sig) => sig.to_der(),
         }
     }
 
     fn to_bytes(&self) -> Box<[u8]> {
         match self {
             InnerSignature::Ecdsa(sig) => sig.to_bytes(),
+            InnerSignature::Rsa(sig) => sig.to_bytes(),
         }
     }
 }
@@ -146,9 +156,13 @@ impl EncodePublicKey for PublicKey {
 /// let algorithm = SignatureKind::Ecdsa(EcdsaAlgorithm::P256);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SignatureKind {
     /// ECDSA using a variety of potential curves
     Ecdsa(EcdsaAlgorithm),
+
+    /// RSA Signing Key
+    RSA(RsaAlgorithm),
 }
 
 impl SignatureKind {
@@ -156,6 +170,7 @@ impl SignatureKind {
     pub fn random(&self) -> SigningKey {
         match self {
             SignatureKind::Ecdsa(ecdsa) => SigningKey(ecdsa.random().into()),
+            SignatureKind::RSA(rsa) => SigningKey(rsa.random().into()),
         }
     }
 }
@@ -190,6 +205,9 @@ impl SigningKey {
             SignatureKind::Ecdsa(algorithm) => Ok(SigningKey(InnerSigningKey::Ecdsa(Box::new(
                 EcdsaSigningKey::from_pkcs8_pem(data, algorithm)?,
             )))),
+            SignatureKind::RSA(algorithm) => Ok(SigningKey(InnerSigningKey::Rsa(Box::new(
+                RsaSigningKey::from_pkcs8_pem(data, algorithm)?,
+            )))),
         }
     }
 
@@ -197,6 +215,7 @@ impl SigningKey {
     pub fn kind(&self) -> SignatureKind {
         match &self.0 {
             InnerSigningKey::Ecdsa(key) => key.kind(),
+            InnerSigningKey::Rsa(key) => key.kind(),
         }
     }
 }
@@ -250,6 +269,7 @@ impl signature::RandomizedDigestSigner<sha2::Sha256, Signature> for SigningKey {
 
 pub(crate) enum InnerSigningKey {
     Ecdsa(Box<dyn SigningKeyAlgorithm + Send + Sync>),
+    Rsa(Box<dyn SigningKeyAlgorithm + Send + Sync>),
     //TODO: Consider supporting other algorithms?
 }
 
@@ -257,18 +277,21 @@ impl InnerSigningKey {
     pub(crate) fn as_jwk(&self) -> self::jwk::Jwk {
         match self {
             InnerSigningKey::Ecdsa(ecdsa) => ecdsa.as_jwk(),
+            InnerSigningKey::Rsa(rsa) => rsa.as_jwk(),
         }
     }
 
     pub(crate) fn public_key(&self) -> PublicKey {
         match self {
             InnerSigningKey::Ecdsa(ecdsa) => ecdsa.public_key(),
+            InnerSigningKey::Rsa(rsa) => rsa.public_key(),
         }
     }
 
     pub(crate) fn algorithm(&self) -> spki::AlgorithmIdentifierOwned {
         match self {
             InnerSigningKey::Ecdsa(ecdsa) => ecdsa.algorithm(),
+            InnerSigningKey::Rsa(rsa) => rsa.algorithm(),
         }
     }
 }
@@ -276,6 +299,12 @@ impl InnerSigningKey {
 impl From<EcdsaSigningKey> for InnerSigningKey {
     fn from(value: EcdsaSigningKey) -> Self {
         InnerSigningKey::Ecdsa(Box::new(value) as _)
+    }
+}
+
+impl From<RsaSigningKey> for InnerSigningKey {
+    fn from(value: RsaSigningKey) -> Self {
+        InnerSigningKey::Rsa(Box::new(value) as _)
     }
 }
 
@@ -291,6 +320,7 @@ impl pkcs8::EncodePrivateKey for InnerSigningKey {
     fn to_pkcs8_der(&self) -> pkcs8::Result<der::SecretDocument> {
         match self {
             InnerSigningKey::Ecdsa(key) => key.to_pkcs8_der(),
+            InnerSigningKey::Rsa(key) => key.to_pkcs8_der(),
         }
     }
 }
@@ -299,6 +329,7 @@ impl signature::Signer<Signature> for InnerSigningKey {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, ::ecdsa::Error> {
         match self {
             InnerSigningKey::Ecdsa(key) => key.try_sign(msg),
+            InnerSigningKey::Rsa(key) => key.try_sign(msg),
         }
     }
 }
@@ -307,6 +338,7 @@ impl signature::DigestSigner<sha2::Sha256, Signature> for InnerSigningKey {
     fn try_sign_digest(&self, digest: sha2::Sha256) -> Result<Signature, ::ecdsa::Error> {
         match self {
             InnerSigningKey::Ecdsa(key) => key.try_sign_digest(digest),
+            InnerSigningKey::Rsa(key) => key.try_sign_digest(digest),
         }
     }
 }
@@ -318,6 +350,7 @@ impl signature::RandomizedDigestSigner<sha2::Sha256, Signature> for InnerSigning
     ) -> Result<Signature, ::ecdsa::Error> {
         match self {
             InnerSigningKey::Ecdsa(key) => key.try_sign_digest_with_rng(digest),
+            InnerSigningKey::Rsa(key) => key.try_sign_digest_with_rng(digest),
         }
     }
 }
@@ -326,6 +359,7 @@ impl fmt::Debug for InnerSigningKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InnerSigningKey::Ecdsa(_) => f.write_str("ECDSA-Key"),
+            InnerSigningKey::Rsa(_) => f.write_str("RSA-Key"),
         }
     }
 }
