@@ -1,6 +1,6 @@
-{
+base64url({
   "alg": "ES256",
   "kid": "https://letsencrypt.test/account/foo-bar",
   "nonce": "<nonce>",
   "url": "https://letsencrypt.test/new-orderz"
-}
+})

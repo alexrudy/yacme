@@ -459,11 +459,12 @@ impl From<SignedRequest> for reqwest::Request {
 
 #[cfg(test)]
 mod test {
-    use ecdsa::SigningKey;
+    use elliptic_curve::SecretKey;
     use p256::NistP256;
     use serde_json::json;
 
-    use jaws::fmt::JWTFormat;
+    use jaws::jose::UnsignedHeader;
+    use jaws::JWTFormat;
 
     use super::*;
 
@@ -483,46 +484,52 @@ mod test {
         assert_eq!(data.encode().unwrap(), expected);
     }
 
-    // #[test]
-    // fn key_builds_header() {
-    //     let key = crate::key!("ec-p255");
+    #[test]
+    fn key_builds_header() {
+        let key = crate::key!("ec-p255");
 
-    //     let url = "https://letsencrypt.test/new-orderz"
-    //         .parse::<Url>()
-    //         .unwrap();
-    //     let nonce: Nonce = String::from("<nonce>").into();
+        let url = "https://letsencrypt.test/new-orderz"
+            .parse::<Url>()
+            .unwrap();
+        let nonce: Nonce = String::from("<nonce>").into();
+        let header = {
+            let mut header = UnsignedHeader::new(RequestHeader::new(url, Some(nonce)));
+            header.registered.key = true;
+            header
+        }
+        .sign::<SecretKey<NistP256>>(&key);
+        assert_eq!(
+            header.formatted().to_string(),
+            crate::example!("header-key.txt").trim()
+        );
+    }
 
-    //     let request_key: Key<Arc<SigningKey<NistP256>>> = (key, None).into();
-    //     let header = request_key.header(url, nonce);
-    //     assert_eq!(
-    //         header.formatted().to_string(),
-    //         crate::example!("header-key.txt").trim()
-    //     );
-    // }
+    #[test]
+    fn key_builds_header_with_id() {
+        let key = crate::key!("ec-p255");
+        let identifier = AccountKeyIdentifier::from(
+            "https://letsencrypt.test/account/foo-bar"
+                .parse::<Url>()
+                .unwrap(),
+        );
+        let url = "https://letsencrypt.test/new-orderz"
+            .parse::<Url>()
+            .unwrap();
+        let nonce: Nonce = String::from("<nonce>").into();
 
-    // #[test]
-    // fn key_builds_header_with_id() {
-    //     let key = crate::key!("ec-p255");
-    //     let identifier = AccountKeyIdentifier::from(
-    //         "https://letsencrypt.test/account/foo-bar"
-    //             .parse::<Url>()
-    //             .unwrap(),
-    //     );
-    //     let url = "https://letsencrypt.test/new-orderz"
-    //         .parse::<Url>()
-    //         .unwrap();
-    //     let nonce: Nonce = String::from("<nonce>").into();
+        let header = {
+            let mut header = UnsignedHeader::new(RequestHeader::new(url, Some(nonce)));
+            header.registered.key_id = Some(identifier.to_string());
+            header
+        }
+        .sign::<SecretKey<NistP256>>(&key);
 
-    //     let request_key: Key<elliptic_curve::SecretKey<p256::NistP256>> =
-    //         (key, Some(identifier)).into();
-    //     let header = request_key.header(url, nonce);
-
-    //     eprintln!("{}", header.formatted());
-    //     assert_eq!(
-    //         header.formatted().to_string(),
-    //         crate::example!("header-id.txt").trim()
-    //     );
-    // }
+        eprintln!("{}", header.formatted());
+        assert_eq!(
+            header.formatted().to_string(),
+            crate::example!("header-id.txt").trim()
+        );
+    }
 
     #[test]
     fn request_has_headers() {

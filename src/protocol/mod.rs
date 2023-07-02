@@ -20,8 +20,8 @@ pub mod response;
 
 pub use client::Client;
 pub use errors::AcmeError;
-pub use jaws::b64data::Base64Data;
-pub use jaws::b64data::Base64JSON;
+pub use jaws::base64data::Base64Data;
+pub use jaws::base64data::Base64JSON;
 
 #[doc(no_inline)]
 pub use request::Request;

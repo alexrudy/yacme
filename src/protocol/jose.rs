@@ -1,14 +1,14 @@
 //! JSON Object Signing and Encryption primitives used in RFC 8885
 //! to implement the ACME protocol.
 
-use std::fmt::{Debug, Write};
+use std::fmt::{Debug, Display, Write};
 use std::ops::Deref;
 use std::sync::Arc;
 
 use serde::{ser, Serialize};
 
 use super::Url;
-use jaws::b64data::{Base64Data, Base64JSON};
+use jaws::base64data::{Base64Data, Base64JSON};
 use jaws::fmt::{self, JWTFormat};
 
 /// Anti-replay nonce
@@ -84,6 +84,12 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
     }
 }
 
+impl Display for AccountKeyIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
 /// The signed header values for the JWS which are common to each
 /// request.
 ///
@@ -133,6 +139,16 @@ impl<P> UnsignedToken<P> {
     pub fn into_inner(self) -> jaws::UnsignedToken<RequestHeader, P> {
         self.0
     }
+
+    /// Immutable access to the token implementation
+    pub fn inner(&self) -> &jaws::UnsignedToken<RequestHeader, P> {
+        &self.0
+    }
+
+    /// Mutable access to the token implementation
+    pub fn inner_mut(&mut self) -> &mut jaws::UnsignedToken<RequestHeader, P> {
+        &mut self.0
+    }
 }
 
 impl<P> UnsignedToken<P>
@@ -152,6 +168,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 fn fmt_token<P, K, S, W>(
     f: &mut fmt::IndentWriter<'_, W>,
     header: &jaws::jose::SignedHeader<RequestHeader, K>,

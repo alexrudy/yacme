@@ -117,7 +117,8 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+    let key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> =
+        Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
 
     // Step 1: Get an account
     tracing::info!("Requesting account");

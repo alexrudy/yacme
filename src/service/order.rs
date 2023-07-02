@@ -175,12 +175,12 @@ impl<'a, K> Order<'a, K> {
                 return Err(AcmeError::NotReady("Order is not finalized"));
             }
             OrderStatus::Processing => {
-                tracing::trace!("Polling for readiness");
+                tracing::trace!(status=?self.status(), "Polling for readiness");
             }
         }
 
         loop {
-            tracing::trace!("Fetching authorization to check status");
+            tracing::trace!("Fetching order info to check status");
             let info: Response<OrderSchema> = self
                 .client()
                 .execute(Request::get(

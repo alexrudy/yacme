@@ -13,13 +13,11 @@ use crate::protocol::Url;
 pub mod external {
     //! External account binding to connect provider accounts to ACME accounts.
 
-    use elliptic_curve::JwkEcKey;
     use jaws::algorithms::hmac::HmacKey;
     use jaws::key::JsonWebKey;
     use jaws::key::JsonWebKeyBuilder;
     use jaws::key::SerializeJWK;
     use serde::{Deserialize, Serialize};
-    use signature::digest::KeyInit;
 
     use crate::protocol::jose::RequestHeader;
     use crate::protocol::jose::UnsignedToken;
@@ -109,10 +107,12 @@ pub mod external {
         where
             K: SerializeJWK,
         {
-            let token = UnsignedToken::post(
+            let mut token = UnsignedToken::post(
                 RequestHeader::new(url, None),
                 JsonWebKeyBuilder::from(public_key).into(),
             );
+
+            token.inner_mut().header.registered.key_id = Some(self.id.0.clone());
 
             let key = jaws::algorithms::hmac::HmacKey::from(self.key.as_ref());
             let mac = HmacSha256::new(key);
@@ -126,6 +126,8 @@ pub mod external {
     #[cfg(test)]
     mod test {
         use std::str::FromStr;
+
+        use jaws::JWTFormat;
 
         use super::*;
 
@@ -150,6 +152,9 @@ pub mod external {
             let public_key = account_key.public_key();
             let url = Url::from_str("https://example.com").unwrap();
             let token = request.token(&public_key, url);
+
+            eprintln!("{}", token.0.formatted());
+
             let serialized = serde_json::to_value(&token).unwrap();
 
             let expected =
@@ -376,7 +381,8 @@ mod test {
             external_account_binding: None,
         };
 
-        let token = UnsignedToken::post(header, &payload);
+        let mut token = UnsignedToken::post(header, &payload);
+        token.inner_mut().header.registered.key = true;
         let signed_token = token.sign(key.deref()).unwrap();
 
         eprintln!("{}", signed_token.formatted());
