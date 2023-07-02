@@ -20,6 +20,7 @@ use self::{ecdsa::EcdsaSigningKey, rsa::RsaSigningKey};
 
 pub use self::{ecdsa::EcdsaAlgorithm, rsa::RsaAlgorithm};
 
+use ::rsa::pkcs1::DecodeRsaPrivateKey;
 pub use p256;
 pub use pkcs8;
 use pkcs8::EncodePublicKey;
@@ -197,6 +198,23 @@ impl SignatureKind {
 pub struct SigningKey(InnerSigningKey);
 
 impl SigningKey {
+    /// Read an RSA private key from a PEM-encoded PKCS#1 format key (usually the kind produced by OpenSSL)
+    /// into the current signing key document. You must provide the signature kind, as the code
+    /// does not currently infer the type of key in use.
+    pub fn from_pkcs1_pem(
+        data: &str,
+        signature: SignatureKind,
+    ) -> Result<Self, ::rsa::pkcs1::Error> {
+        match signature {
+            SignatureKind::Ecdsa(_) => panic!("ECDSA not supported by PKCS1"),
+            SignatureKind::RSA(alg) => {
+                let keypair = ::rsa::RsaPrivateKey::from_pkcs1_pem(data)?;
+                let signing_key = self::rsa::RsaSigningKey::new(alg, keypair);
+                Ok(SigningKey(signing_key.into()))
+            }
+        }
+    }
+
     /// Read a private key from a PEM-encoded PKCS#8 format key (usually the kind produced by
     /// OpenSSL) into this signing key document. You must provide the signature kind, as the code
     /// does not currently infer the type of key in use.
