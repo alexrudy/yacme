@@ -1,15 +1,13 @@
 //! JSON Object Signing and Encryption primitives used in RFC 8885
 //! to implement the ACME protocol.
 
-use std::fmt::{Debug, Display, Write};
+use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::sync::Arc;
 
 use serde::{ser, Serialize};
 
 use super::Url;
-use jaws::base64data::{Base64Data, Base64JSON};
-use jaws::fmt::{self, JWTFormat};
 
 /// Anti-replay nonce
 ///
@@ -85,7 +83,7 @@ impl AsRef<[u8]> for AccountKeyIdentifier {
 }
 
 impl Display for AccountKeyIdentifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_ref())
     }
 }
@@ -117,93 +115,4 @@ impl RequestHeader {
     pub fn replace_nonce(&mut self, nonce: Nonce) {
         self.nonce = Some(nonce);
     }
-}
-
-/// An unsigned JWT token
-pub struct UnsignedToken<P>(jaws::UnsignedToken<RequestHeader, P>);
-
-impl<P> UnsignedToken<P> {
-    /// Create a JWS token appropraite for an ACME `GET` request.
-    ///
-    /// The request will have an empty string as the payload.
-    pub fn get(custom: RequestHeader) -> Self {
-        UnsignedToken(jaws::UnsignedToken::empty(custom))
-    }
-
-    /// Create a JWS token appropraite for an ACME `POST` request.
-    pub fn post(custom: RequestHeader, payload: P) -> Self {
-        UnsignedToken(jaws::UnsignedToken::new(custom, payload))
-    }
-
-    /// Produce the native token type
-    pub fn into_inner(self) -> jaws::UnsignedToken<RequestHeader, P> {
-        self.0
-    }
-
-    /// Immutable access to the token implementation
-    pub fn inner(&self) -> &jaws::UnsignedToken<RequestHeader, P> {
-        &self.0
-    }
-
-    /// Mutable access to the token implementation
-    pub fn inner_mut(&mut self) -> &mut jaws::UnsignedToken<RequestHeader, P> {
-        &mut self.0
-    }
-}
-
-impl<P> UnsignedToken<P>
-where
-    P: Serialize,
-{
-    /// Sign a token with the given algorithm.
-    pub fn sign<A>(
-        self,
-        algorithm: &A,
-    ) -> Result<jaws::Token<RequestHeader, P>, jaws::token::TokenSigningError<A::Error>>
-    where
-        A: jaws::algorithms::SigningAlgorithm,
-        A::Key: Clone,
-    {
-        self.0.sign(algorithm).map(|t| t.into_token())
-    }
-}
-
-#[allow(dead_code)]
-fn fmt_token<P, K, S, W>(
-    f: &mut fmt::IndentWriter<'_, W>,
-    header: &jaws::jose::SignedHeader<RequestHeader, K>,
-    payload: &Option<P>,
-    signature: Option<&Base64Data<S>>,
-) -> fmt::Result
-where
-    P: Serialize,
-    K: jaws::key::SerializeJWK,
-    S: AsRef<[u8]>,
-    W: fmt::Write,
-{
-    writeln!(f, "{{")?;
-    {
-        let mut f = f.indent();
-        write!(f, "\"protected\": ")?;
-        <jaws::jose::SignedHeader<RequestHeader, K> as jaws::JWTFormat>::fmt_indented_skip_first(
-            header, &mut f,
-        )?;
-        writeln!(f, ",")?;
-        write!(f, "\"payload\": ")?;
-        if let Some(payload) = payload {
-            Base64JSON(payload).fmt_indented_skip_first(&mut f)?;
-        } else {
-            write!(f, "\"\"")?;
-        }
-        writeln!(f, ",")?;
-        write!(f, "\"signature\": ")?;
-        if let Some(signature) = signature {
-            <Base64Data<S> as fmt::JWTFormat>::fmt_indented_skip_first(signature, &mut f)?;
-        } else {
-            write!(f, "\"<signature>\"")?;
-        }
-    }
-    writeln!(f)?;
-    writeln!(f, "}}")?;
-    Ok(())
 }

@@ -17,10 +17,13 @@ pub mod external {
     use jaws::key::JsonWebKey;
     use jaws::key::JsonWebKeyBuilder;
     use jaws::key::SerializeJWK;
+    use jaws::token::Signed;
+
+    use jaws::Flat;
+    use jaws::Token;
     use serde::{Deserialize, Serialize};
 
     use crate::protocol::jose::RequestHeader;
-    use crate::protocol::jose::UnsignedToken;
     use crate::protocol::Base64Data;
     use crate::protocol::Url;
 
@@ -72,8 +75,33 @@ pub mod external {
     type HmacSha256 = jaws::algorithms::hmac::Hmac<sha2::Sha256>;
     /// The token used to bind an external account based on a Key from
     /// the provider.
-    #[derive(Debug, Serialize)]
-    pub struct ExternalAccountToken(jaws::Token<RequestHeader, JsonWebKey>);
+    #[derive(Debug)]
+    pub struct ExternalAccountToken(
+        jaws::Token<JsonWebKey, Signed<RequestHeader, HmacSha256>, Flat>,
+    );
+
+    impl ExternalAccountToken {
+        /// Get the underlying token.
+        pub fn into_inner(
+            self,
+        ) -> jaws::Token<JsonWebKey, Signed<RequestHeader, HmacSha256>, Flat> {
+            self.0
+        }
+    }
+
+    impl serde::ser::Serialize for ExternalAccountToken {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(
+                &self
+                    .0
+                    .rendered()
+                    .map_err(|error| serde::ser::Error::custom(error))?,
+            )
+        }
+    }
 
     /// Information for externally binding accounts, provided by the ACME provider.
     ///
@@ -107,12 +135,12 @@ pub mod external {
         where
             K: SerializeJWK,
         {
-            let mut token = UnsignedToken::post(
+            let mut token = Token::flat(
                 RequestHeader::new(url, None),
                 JsonWebKeyBuilder::from(public_key).into(),
             );
 
-            token.inner_mut().header.registered.key_id = Some(self.id.0.clone());
+            token.header_mut().registered.key_id = Some(self.id.0.clone());
 
             let key = jaws::algorithms::hmac::HmacKey::from(self.key.as_ref());
             let mac = HmacSha256::new(key);
@@ -155,7 +183,9 @@ pub mod external {
 
             eprintln!("{}", token.0.formatted());
 
-            let serialized = serde_json::to_value(&token).unwrap();
+            let rendered = token.0.rendered().unwrap();
+
+            let serialized: serde_json::Value = serde_json::from_str(&rendered).unwrap();
 
             let expected =
                 serde_json::from_str::<serde_json::Value>(crate::example!("external-binding.json"))
@@ -332,8 +362,8 @@ mod test {
 
     use crate::protocol::jose::Nonce;
     use crate::protocol::jose::RequestHeader;
-    use crate::protocol::jose::UnsignedToken;
     use jaws::JWTFormat;
+    use jaws::Token;
     use serde_json::Value;
 
     use super::*;
@@ -381,8 +411,9 @@ mod test {
             external_account_binding: None,
         };
 
-        let mut token = UnsignedToken::post(header, &payload);
-        token.inner_mut().header.registered.key = true;
+        let mut token = Token::flat(header, payload);
+        token.header_mut().jwk().derived();
+
         let signed_token = token.sign(key.deref()).unwrap();
 
         eprintln!("{}", signed_token.formatted());

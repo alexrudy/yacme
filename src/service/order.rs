@@ -218,7 +218,9 @@ impl<'a, K> Order<'a, K> {
         K::Error: std::error::Error + Send + Sync + 'static,
     {
         let order_info = &self.data;
-        let Some(url) = order_info.certificate() else { return Err(AcmeError::NotReady("certificate")) };
+        let Some(url) = order_info.certificate() else {
+            return Err(AcmeError::NotReady("certificate"));
+        };
 
         let mut request = Request::get(url.clone(), self.account().request_key());
 

@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-// pub mod key;
 pub mod cert;
 pub mod protocol;
 pub mod schema;

@@ -102,12 +102,12 @@ impl ClientBuilder {
 /// # use std::sync::Arc;
 /// # use yacme::protocol::Client;
 /// # use yacme::protocol::Request;
-/// # use yacme::key::{SignatureKind, EcdsaAlgorithm};
 /// # use yacme::protocol::Response;
+/// # use signature::rand_core::OsRng;
 /// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+/// let key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> = Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
 ///
 /// let mut client = Client::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
