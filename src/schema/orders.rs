@@ -154,7 +154,7 @@ impl FinalizeOrder {
         #[cfg(all(feature = "trace-requests", not(docs)))]
         {
             let doc = signed_csr.to_pem();
-            tracing::trace!("CSR: {}", doc);
+            tracing::trace!("CSR: \n{}", doc);
         }
 
         signed_csr.into()

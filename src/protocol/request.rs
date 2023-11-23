@@ -38,7 +38,7 @@ use std::fmt::Write;
 use std::{ops::Deref, sync::Arc};
 
 use http::HeaderMap;
-use jaws::token::{HasSignature, MaybeSigned, Signed, TokenFormat, Unsigned};
+use jaws::token::{Signed, TokenFormat, Unsigned};
 use serde::Serialize;
 
 use super::fmt::HttpCase;
@@ -90,40 +90,7 @@ pub enum Method<T> {
     Post(T),
 }
 
-/// The JWT Token used in an ACME HTTP request.
-///
-/// This is a thin wrapper around the [`jaws::Token`] type, which
-/// supports holding either the GET-as-POST or POST payload in the
-/// same type.
-#[derive(Debug, Clone)]
-pub enum Token<T, State>
-where
-    State: MaybeSigned,
-{
-    /// GET-as-POST token with an empty string payload
-    Get(jaws::Token<(), State, Flat>),
-
-    /// POST token with a JSON payload
-    Post(jaws::Token<T, State, Flat>),
-}
-
-impl<T, State> Serialize for Token<T, State>
-where
-    State: HasSignature,
-    <State as MaybeSigned>::Header: Serialize,
-    <State as MaybeSigned>::HeaderState: Serialize,
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Token::Get(token) => token.serialize(serializer),
-            Token::Post(token) => token.serialize(serializer),
-        }
-    }
-}
+type Token<Payload, State> = jaws::Token<Payload, State, Flat>;
 
 /// The components requrired to sign an ACME request from an account which
 /// is already registered with the ACME service in question.
@@ -183,13 +150,12 @@ where
     {
         match &self {
             Key::Identified(Identified { identifier, key }) => {
-                token.header_mut().registered.key_id =
-                    Some(AsRef::<str>::as_ref(&identifier).to_owned());
+                *token.header_mut().key_id() = Some(AsRef::<str>::as_ref(&identifier).to_owned());
                 token.sign(key.deref())
             }
 
             Key::Signed(Signature { key }) => {
-                token.header_mut().jwk().derived();
+                token.header_mut().key().derived();
                 token.sign(key.deref())
             }
         }
@@ -354,18 +320,15 @@ where
         let header = RequestHeader::new(self.url.clone(), Some(nonce));
 
         match &self.method {
-            Method::Get => Token::Get(jaws::Token::flat(header, ())),
-            Method::Post(payload) => Token::Post(jaws::Token::flat(header, payload)),
+            Method::Get => jaws::Token::empty(header, Flat),
+            Method::Post(payload) => jaws::Token::flat(header, payload),
         }
     }
 
     fn signed_token(&self, nonce: Nonce) -> Result<Token<&T, Signed<RequestHeader, K>>, AcmeError> {
         let token = self.token(nonce);
 
-        match token {
-            Token::Get(token) => Ok(Token::Get(self.key.sign(token)?)),
-            Token::Post(token) => Ok(Token::Post(self.key.sign(token)?)),
-        }
+        Ok(self.key.sign(token)?)
     }
 
     /// Sign and finalize this request so that it can be sent over HTTP.
@@ -462,14 +425,7 @@ where
     fn fmt<W: std::fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> std::fmt::Result {
         self.0.acme_format_preamble(f)?;
         let signed = self.0.signed_token(self.1.clone()).unwrap();
-        match signed {
-            Token::Get(token) => {
-                <jaws::Token<(), Signed<RequestHeader, K>, _> as fmt::JWTFormat>::fmt(&token, f)
-            }
-            Token::Post(token) => {
-                <jaws::Token<&T, Signed<RequestHeader, K>, _> as fmt::JWTFormat>::fmt(&token, f)
-            }
-        }
+        <jaws::Token<&T, Signed<RequestHeader, K>, _> as fmt::JWTFormat>::fmt(&signed, f)
     }
 }
 
@@ -485,14 +441,7 @@ where
         let nonce = String::from("<nonce>").into();
         let token = self.token(nonce);
 
-        match token {
-            Token::Get(token) => {
-                <jaws::Token<(), Unsigned<RequestHeader>, _> as fmt::JWTFormat>::fmt(&token, f)
-            }
-            Token::Post(token) => {
-                <jaws::Token<&T, Unsigned<RequestHeader>, _> as fmt::JWTFormat>::fmt(&token, f)
-            }
-        }
+        <jaws::Token<&T, Unsigned<RequestHeader>, _> as fmt::JWTFormat>::fmt(&token, f)
     }
 }
 
@@ -550,7 +499,7 @@ mod test {
         let nonce: Nonce = String::from("<nonce>").into();
 
         let mut token = jaws::Token::new(RequestHeader::new(url, Some(nonce)), &(), Compact);
-        token.header_mut().jwk().derived();
+        token.header_mut().key().derived();
 
         let signed = token.sign::<SecretKey<NistP256>>(&key).unwrap();
         let header = signed.header();
@@ -574,7 +523,7 @@ mod test {
         let nonce: Nonce = String::from("<nonce>").into();
 
         let mut token = jaws::Token::new(RequestHeader::new(url, Some(nonce)), &(), Compact);
-        token.header_mut().registered.key_id = Some(identifier.to_string());
+        *token.header_mut().key_id() = Some(identifier.to_string());
 
         let signed = token.sign::<SecretKey<NistP256>>(&key).unwrap();
         let header = signed.header();

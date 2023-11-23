@@ -1,4 +1,5 @@
 //! Client for sending HTTP requests to an ACME server
+
 use http::HeaderMap;
 use reqwest::Certificate;
 use serde::Serialize;
@@ -222,6 +223,8 @@ impl Client {
                     tracing::trace!("Retrying request with next nonce");
                     nonce = self.get_nonce().await?;
                 } else {
+                    let text = String::from_utf8_lossy(&body);
+                    tracing::trace!(%error, "RES: \n{}", text);
                     return Err(error.into());
                 }
             }

@@ -8,27 +8,33 @@
 
 use std::ops::Deref;
 use std::sync::Arc;
+use std::time::Duration;
 
 use signature::rand_core::OsRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
 
+fn tracing_init() {
+    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+}
+
 #[tokio::test]
 async fn http01() {
-    let _ = tracing_subscriber::fmt::try_init();
-    pebble_http01().await.unwrap()
+    tracing_init();
+    pebble_http01().await.unwrap();
+    yacme::pebble::Pebble::new().down();
 }
 
 #[tracing::instrument("http01")]
 async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     let pebble = yacme::pebble::Pebble::new();
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
         .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
         .add_root_certificate(pebble.certificate())
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(Duration::from_secs(30))
         .build()
         .await?;
 
@@ -82,7 +88,9 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
             .await;
 
         chall.ready().await?;
-        auth.finalize().await?;
+        tokio::time::timeout(Duration::from_secs(60), auth.finalize())
+            .await
+            .unwrap()?;
         tracing::info!("Authorization finalized");
     }
 
@@ -90,7 +98,12 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Generating random certificate key");
     let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
     let signer = ecdsa::SigningKey::from(certificate_key.deref());
-    let cert = order.finalize_and_download(&signer).await?;
+    let cert = tokio::time::timeout(
+        Duration::from_secs(60),
+        order.finalize_and_download(&signer),
+    )
+    .await
+    .unwrap()?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
@@ -101,19 +114,20 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn http01_failure() {
-    let _ = tracing_subscriber::fmt::try_init();
-    pebble_http01_failue().await.unwrap()
+    tracing_init();
+    pebble_http01_failue().await.unwrap();
+    yacme::pebble::Pebble::new().down();
 }
 
 #[tracing::instrument("http01-failure")]
 async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
     let pebble = yacme::pebble::Pebble::new();
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
         .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
         .add_root_certificate(pebble.certificate())
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(Duration::from_secs(30))
         .build()
         .await?;
 
@@ -134,8 +148,8 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
 
     let order = account
         .order()
-        .dns("www.example.test")
-        .dns("internal.example.test")
+        .dns("fail.example.test")
+        .dns("also-fail.example.test")
         .create()
         .await?;
     tracing::trace!("Order: \n{order:#?}");
@@ -165,7 +179,9 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
         //     .await;
 
         chall.ready().await?;
-        let error = auth.finalize().await.unwrap_err();
+        let error = tokio::time::timeout(Duration::from_secs(60), auth.finalize())
+            .await?
+            .unwrap_err();
         assert!(matches!(error, yacme::protocol::AcmeError::Acme(_)));
         tracing::info!("Authorization finalized");
     }
@@ -177,19 +193,21 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn dns01() {
-    let _ = tracing_subscriber::fmt::try_init();
-    pebble_dns01().await.unwrap()
+    tracing_init();
+    let r = pebble_dns01().await;
+    yacme::pebble::Pebble::new().down();
+    r.unwrap();
 }
 
 #[tracing::instrument("dns01")]
 async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     let pebble = yacme::pebble::Pebble::new();
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
         .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
         .add_root_certificate(pebble.certificate())
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(Duration::from_secs(30))
         .build()
         .await?;
 
@@ -243,7 +261,9 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
             .await;
 
         chall.ready().await?;
-        auth.finalize().await?;
+        tokio::time::timeout(Duration::from_secs(60), auth.finalize())
+            .await
+            .unwrap()?;
         tracing::info!("Authorization finalized");
     }
 
@@ -251,7 +271,11 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Generating random certificate key");
     let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
     let signer = ecdsa::SigningKey::from(certificate_key.deref());
-    let cert = order.finalize_and_download(&signer).await?;
+    let cert = tokio::time::timeout(
+        Duration::from_secs(60),
+        order.finalize_and_download(&signer),
+    )
+    .await??;
     println!("{}", cert.to_pem_documents()?.join(""));
 
     pebble.down();

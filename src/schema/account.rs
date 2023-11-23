@@ -140,7 +140,7 @@ pub mod external {
                 JsonWebKeyBuilder::from(public_key).into(),
             );
 
-            token.header_mut().registered.key_id = Some(self.id.0.clone());
+            *token.header_mut().key_id() = Some(self.id.0.clone());
 
             let key = jaws::algorithms::hmac::HmacKey::from(self.key.as_ref());
             let mac = HmacSha256::new(key);
@@ -412,7 +412,7 @@ mod test {
         };
 
         let mut token = Token::flat(header, payload);
-        token.header_mut().jwk().derived();
+        token.header_mut().key().derived();
 
         let signed_token = token.sign(key.deref()).unwrap();
 

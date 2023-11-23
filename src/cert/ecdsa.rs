@@ -1,6 +1,7 @@
 use std::ops::Add;
 
 use ::ecdsa::PrimeCurve;
+use const_oid::AssociatedOid;
 use digest::generic_array::ArrayLength;
 use ecdsa::der::{MaxOverhead, MaxSize};
 use ecdsa::hazmat::SignPrimitive;
@@ -60,8 +61,8 @@ impl super::CertificateKey<::ecdsa::Signature<p256::NistP256>, sha2::Sha256>
 {
     fn algorithm(&self) -> spki::AlgorithmIdentifierOwned {
         spki::AlgorithmIdentifierOwned {
-            oid: const_oid::db::rfc5912::ECDSA_WITH_SHA_256,
-            parameters: None,
+            oid: const_oid::db::rfc5912::ID_EC_PUBLIC_KEY,
+            parameters: Some((&p256::NistP256::OID).into()),
         }
     }
 }

@@ -52,7 +52,7 @@ tokio = { version = "1" }
 tracing = { version = "0.1" }
 url = { version = "2", features = ["serde"] }
 x509-cert = { version = "0.2", features = ["pem", "std"] }
-jaws = { path = "../jaws" }
+jaws = { version = "0.4", path = "../jaws" }
 
 [dev-dependencies]
 lazy_static = "1"
