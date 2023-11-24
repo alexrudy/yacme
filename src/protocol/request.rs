@@ -53,7 +53,7 @@ const CONTENT_JOSE: &str = "application/jose+json";
 /// in some fashion.
 ///
 /// This is only useful when formatting the response in the ACME-style HTTP
-/// format, as used by [`super::fmt::AcmeFormat`].
+/// format, as used by [`jaws::fmt`].
 ///
 /// There is a blanket implementation provided for any type which implements
 /// [`serde::Serialize`], as we assume that serializable values would be sent
@@ -137,6 +137,7 @@ where
     ///
     /// ACME Protected headers must contain the target URL for the request, along with a
     /// [Nonce], which is used for replay protection.
+    #[allow(clippy::type_complexity)]
     pub(crate) fn sign<P, Fmt>(
         &self,
         mut token: jaws::Token<P, Unsigned<RequestHeader>, Fmt>,

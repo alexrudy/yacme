@@ -16,7 +16,7 @@ pub(crate) mod test {
     use pkcs8::{DecodePrivateKey, EncodePrivateKey};
 
     pub fn key(private: &str) -> Arc<elliptic_curve::SecretKey<p256::NistP256>> {
-        let key = elliptic_curve::SecretKey::from_pkcs8_pem(&private).unwrap();
+        let key = elliptic_curve::SecretKey::from_pkcs8_pem(private).unwrap();
 
         Arc::new(key)
     }

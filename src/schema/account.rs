@@ -94,12 +94,7 @@ pub mod external {
         where
             S: serde::Serializer,
         {
-            serializer.serialize_str(
-                &self
-                    .0
-                    .rendered()
-                    .map_err(|error| serde::ser::Error::custom(error))?,
-            )
+            serializer.serialize_str(&self.0.rendered().map_err(serde::ser::Error::custom)?)
         }
     }
 

@@ -3,7 +3,7 @@
 //! [RFC 8885][] does not constrain HTTP responses from the ACME service
 //! strongly, except that they should contain a [nonce][super::jose::Nonce].
 //!
-//! The response type here also implements [`super::fmt::AcmeFormat`] so that
+//! The response type here also implements [`jaws::fmt::JWTFormat`] so that
 //! it can be displayed in a form similar to those in [RFC 8885][] while
 //! debugging.
 //!
