@@ -110,6 +110,8 @@ impl Pebble {
     }
 
     fn start(&self) {
+        tracing::debug!("Starting pebble server");
+
         let output = std::process::Command::new("docker")
             .arg("compose")
             .args([
@@ -124,8 +126,38 @@ impl Pebble {
             .expect("able to spawn docker compose command");
 
         if !output.status.success() {
-            panic!("Failed to start a pebble server");
+            // let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            panic!("Failed to start a pebble server: {stderr}");
         }
+    }
+
+    pub async fn ready(&self) -> Result<(), reqwest::Error> {
+        let client = reqwest::Client::builder()
+            .add_root_certificate(self.certificate())
+            .build()
+            .unwrap();
+
+        loop {
+            match client.get("https://localhost:14000/dir").send().await {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        break;
+                    }
+                    tracing::trace!(
+                        "Error response from pebble:\n{}",
+                        resp.text().await.unwrap_or("".to_owned())
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                Err(error) => {
+                    tracing::trace!("Error connecting to pebble: {}", error);
+                }
+            };
+        }
+
+        Ok(())
     }
 
     /// Get the pebble root CA certificate.
@@ -262,6 +294,7 @@ impl Pebble {
     }
 
     fn down_internal(&self) {
+        tracing::debug!("Stopping pebble server");
         let output = std::process::Command::new("docker")
             .arg("compose")
             .args(["down", "--remove-orphans", "--volumes", "--timeout", "10"])

@@ -3,7 +3,7 @@
 //! [RFC 8885][] does not constrain HTTP responses from the ACME service
 //! strongly, except that they should contain a [nonce][super::jose::Nonce].
 //!
-//! The response type here also implements [`super::fmt::AcmeFormat`] so that
+//! The response type here also implements [`jaws::fmt::JWTFormat`] so that
 //! it can be displayed in a form similar to those in [RFC 8885][] while
 //! debugging.
 //!
@@ -15,11 +15,13 @@ use chrono::{DateTime, Utc};
 use http::HeaderMap;
 use serde::de::DeserializeOwned;
 
-use super::fmt::{self, HttpCase};
+use super::fmt::HttpCase;
 use super::jose::Nonce;
 use super::request::Encode;
 use super::AcmeError;
 use super::Url;
+
+use jaws::fmt;
 
 /// Helper trait for any type which can be decoded from a
 /// response from an ACME server.
@@ -154,7 +156,7 @@ impl<T> Response<T> {
     }
 }
 
-impl<T> fmt::AcmeFormat for Response<T>
+impl<T> fmt::JWTFormat for Response<T>
 where
     T: Encode,
 {

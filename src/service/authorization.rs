@@ -23,15 +23,15 @@ use super::{account::Account, client::Client, order::Order};
 /// Authorizations are attached to [`Order`]s, and contain a list of challenges that the account
 /// must complete in order to prove control of the identifier.
 #[derive(Debug)]
-pub struct Authorization<'o> {
-    order: &'o Order<'o>,
+pub struct Authorization<'o, K> {
+    order: &'o Order<'o, K>,
     data: schema::authorizations::Authorization,
     url: Url,
 }
 
-impl<'o> Authorization<'o> {
+impl<'o, K> Authorization<'o, K> {
     pub(crate) fn new(
-        order: &'o Order<'o>,
+        order: &'o Order<'o, K>,
         data: schema::authorizations::Authorization,
         url: Url,
     ) -> Self {
@@ -39,12 +39,15 @@ impl<'o> Authorization<'o> {
     }
 
     #[inline]
-    pub(crate) fn client(&self) -> &Client {
+    pub(crate) fn client(&self) -> &Client
+    where
+        K: Clone,
+    {
         self.order.client()
     }
 
     #[inline]
-    pub(crate) fn account(&self) -> &Account {
+    pub(crate) fn account(&self) -> &Account<K> {
         self.order.account()
     }
 
@@ -69,7 +72,7 @@ impl<'o> Authorization<'o> {
     ///
     /// Challenge kinds are supplied as a string, and are defined in the ACME spec.
     /// This method supports `http-01` and `dns-01` challenges.
-    pub fn challenge<'c: 'o>(&'c self, kind: &ChallengeKind) -> Option<Challenge<'o, 'c>> {
+    pub fn challenge<'c: 'o>(&'c self, kind: &ChallengeKind) -> Option<Challenge<'o, 'c, K>> {
         for chall in &self.data().challenges {
             if chall.kind() == *kind {
                 let url = chall.url().unwrap();
@@ -80,7 +83,13 @@ impl<'o> Authorization<'o> {
     }
 
     /// Refresh the authorization data from the ACME provider.
-    pub async fn refresh(&mut self) -> Result<(), AcmeError> {
+    pub async fn refresh(&mut self) -> Result<(), AcmeError>
+    where
+        K: Clone,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let response: Response<schema::authorizations::Authorization> = self
             .client()
             .execute(Request::get(
@@ -95,7 +104,13 @@ impl<'o> Authorization<'o> {
 
     /// Wait for this authorization to get finalized (i.e. all challenges have responses)
     #[tracing::instrument(skip(self), level = "debug", fields(identifier = %self.data().identifier))]
-    pub async fn finalize(&mut self) -> Result<(), AcmeError> {
+    pub async fn finalize(&mut self) -> Result<(), AcmeError>
+    where
+        K: Clone,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         tracing::debug!("Polling authorization resource to check for status updates");
 
         loop {
@@ -150,15 +165,15 @@ impl<'o> Authorization<'o> {
 /// A challenge is one way to prove to the ACME service provider that
 /// this account controls the identifier (e.g. domain name) in question.
 #[derive(Debug)]
-pub struct Challenge<'a, 'c> {
-    auth: &'c Authorization<'a>,
+pub struct Challenge<'a, 'c, K> {
+    auth: &'c Authorization<'a, K>,
     data: schema::challenges::Challenge,
     url: Url,
 }
 
-impl<'a, 'c: 'a> Challenge<'a, 'c> {
+impl<'a, 'c: 'a, K> Challenge<'a, 'c, K> {
     pub(crate) fn new(
-        auth: &'a Authorization<'a>,
+        auth: &'a Authorization<'a, K>,
         data: schema::challenges::Challenge,
         url: Url,
     ) -> Self {
@@ -166,12 +181,15 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
     }
 
     #[inline]
-    pub(crate) fn client(&self) -> &Client {
+    pub(crate) fn client(&self) -> &Client
+    where
+        K: Clone,
+    {
         self.auth.client()
     }
 
     #[inline]
-    pub(crate) fn account(&self) -> &Account {
+    pub(crate) fn account(&self) -> &Account<K> {
         self.auth.account()
     }
 
@@ -196,7 +214,13 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
     }
 
     /// Notify the server that the challenge is ready.
-    pub async fn ready(&mut self) -> Result<(), AcmeError> {
+    pub async fn ready(&mut self) -> Result<(), AcmeError>
+    where
+        K: Clone,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         let name = self.data().name().unwrap_or("<unknown>");
         tracing::trace!("POST to notify that challenge {} is ready", name);
 
@@ -206,7 +230,10 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
             self.account().request_key(),
         );
 
-        let response = self.client().execute::<_, ChallengeSchema>(request).await?;
+        let response = self
+            .client()
+            .execute::<_, _, ChallengeSchema>(request)
+            .await?;
         self.data = response.into_inner();
         tracing::debug!("Notified that challenge {} is ready", name);
 
@@ -214,7 +241,13 @@ impl<'a, 'c: 'a> Challenge<'a, 'c> {
     }
 
     /// Wait for this specific challenge to get finalized.
-    pub async fn finalize(&mut self) -> Result<(), AcmeError> {
+    pub async fn finalize(&mut self) -> Result<(), AcmeError>
+    where
+        K: Clone,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
+    {
         tracing::debug!("Polling authorization resource to check for status updates");
 
         let name = self

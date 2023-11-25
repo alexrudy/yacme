@@ -23,8 +23,14 @@ impl Client {
     }
 
     #[cfg(feature = "trace-requests")]
-    pub(crate) async fn execute<T, R>(&self, request: Request<T>) -> Result<Response<R>, AcmeError>
+    pub(crate) async fn execute<T, K, R>(
+        &self,
+        request: Request<T, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
         T: Serialize,
         R: Decode + Encode,
     {
@@ -33,8 +39,14 @@ impl Client {
     }
 
     #[cfg(not(feature = "trace-requests"))]
-    pub(crate) async fn execute<T, R>(&self, request: Request<T>) -> Result<Response<R>, AcmeError>
+    pub(crate) async fn execute<T, K, R>(
+        &self,
+        request: Request<T, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
         T: Serialize,
         R: Decode,
     {

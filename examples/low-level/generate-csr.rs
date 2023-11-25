@@ -1,4 +1,5 @@
-use yacme::key::cert::CertificateSigningRequest;
+use pkcs8::DecodePrivateKey;
+use yacme::cert::CertificateSigningRequest;
 
 #[tokio::main]
 async fn main() {
@@ -9,16 +10,14 @@ async fn main() {
             env!("CARGO_MANIFEST_DIR"),
             "/reference-keys/ec-p255-cert.pem"
         ));
-        yacme::key::SigningKey::from_pkcs8_pem(
-            pem,
-            yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
-        )
-        .unwrap()
+        p256::SecretKey::from_pkcs8_pem(pem).unwrap()
     };
+
+    let signer = ecdsa::SigningKey::from(&key);
 
     let mut csr = CertificateSigningRequest::new();
     csr.push("www.example.org");
     csr.push("internal.example.org");
-    let signed = csr.sign(&key);
+    let signed = csr.sign(&signer);
     println!("{}", signed.to_pem());
 }

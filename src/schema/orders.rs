@@ -4,8 +4,7 @@
 //! include multiple identifiers.  The order is created by the client, and then validated
 //! using the authorizations and challenges.
 
-use crate::key::cert::SignedCertificateRequest;
-use crate::key::SigningKey;
+use crate::cert::SignedCertificateRequest;
 use crate::protocol::Base64Data;
 use chrono::{DateTime, Utc};
 use der::Decode;
@@ -139,8 +138,13 @@ impl FinalizeOrder {
     /// Create a new finalize order request from an order and a certificate signing key.
     ///
     /// The signing key used here **must** not be the same key used to identify the ACME account.
-    pub fn new(order: &Order, key: &SigningKey) -> Self {
-        let mut csr = crate::key::cert::CertificateSigningRequest::new();
+    pub fn new<K, S, D>(order: &Order, key: &K) -> Self
+    where
+        K: crate::cert::CertificateKey<S, D>,
+        S: crate::cert::Signature,
+        D: digest::Digest,
+    {
+        let mut csr = crate::cert::CertificateSigningRequest::new();
 
         for name in order.identifiers().iter().cloned() {
             csr.push(name);
@@ -150,7 +154,7 @@ impl FinalizeOrder {
         #[cfg(all(feature = "trace-requests", not(docs)))]
         {
             let doc = signed_csr.to_pem();
-            tracing::trace!("CSR: {}", doc);
+            tracing::trace!("CSR: \n{}", doc);
         }
 
         signed_csr.into()

@@ -8,10 +8,11 @@ use der::{
     Encode, FixedTag,
 };
 use sha2::Digest;
-use signature::{rand_core::OsRng, RandomizedDigestSigner};
+use signature::DigestSigner;
 use x509_cert::ext::pkix;
 
-use super::SigningKey;
+mod ecdsa;
+mod rsa;
 
 const PEM_TAG_CSR: &str = "CERTIFICATE REQUEST";
 
@@ -42,6 +43,28 @@ impl From<&str> for RequestedSubjectName {
     fn from(value: &str) -> Self {
         Self::Dns(value.to_owned())
     }
+}
+
+pub trait PublicKey {
+    fn as_bytes(&self) -> Box<[u8]>;
+}
+
+pub trait KeyPair {
+    type PublicKey: PublicKey;
+
+    fn public_key(&self) -> Self::PublicKey;
+}
+
+pub trait CertificateKey<S, D>: KeyPair + DigestSigner<D, S>
+where
+    S: Signature,
+    D: Digest,
+{
+    fn algorithm(&self) -> spki::AlgorithmIdentifierOwned;
+}
+
+pub trait Signature {
+    fn to_der(&self) -> der::Document;
 }
 
 /// The informational data in a certificate signing request sufficient to
@@ -84,12 +107,17 @@ impl CertificateSigningRequest {
         self.names.push(name.into())
     }
 
-    /// Sign this request with a [`SigningKey`], creating an X.509 certificate
+    /// Sign this request with a [`CertificateKey`], creating an X.509 certificate
     /// singing request, which will be serialized using ASN.1 DER
     ///
-    /// The [`SigningKey`] here should not be the same as the account key used
+    /// The [`CertificateKey`] here should not be the same as the account key used
     /// in the rest of the ACME protocol.
-    pub fn sign(self, key: &SigningKey) -> SignedCertificateRequest {
+    pub fn sign<K, S, D>(self, key: &K) -> SignedCertificateRequest
+    where
+        K: CertificateKey<S, D>,
+        S: Signature,
+        D: Digest,
+    {
         // CSR needs the public key info to know who signed it.
         let public_key = key.public_key();
         // let algorithm = public_key.algorithm();
@@ -106,7 +134,7 @@ impl CertificateSigningRequest {
         let bytes = public_key.as_bytes();
 
         let spki = spki::SubjectPublicKeyInfoOwned {
-            algorithm: public_key.algorithm(),
+            algorithm: key.algorithm(),
             subject_public_key: der::asn1::BitString::from_bytes(&bytes).unwrap(),
         };
 
@@ -172,10 +200,10 @@ impl CertificateSigningRequest {
 
         // Digest sign the CSR target
         let csr_target = csr_info.to_der().expect("Valid encoding");
-        let mut digest = sha2::Sha256::new();
+        let mut digest = D::new();
         digest.update(&csr_target);
 
-        let signature = key.sign_digest_with_rng(&mut OsRng, digest);
+        let signature = key.sign_digest(digest);
 
         // Create the final CSR, containing in the info and the signature.
         let csr = x509_cert::request::CertReq {
@@ -213,19 +241,21 @@ impl AsRef<[u8]> for SignedCertificateRequest {
 #[cfg(test)]
 mod test {
     use der::Decode;
-
-    use crate::key::SignatureKind;
+    use signature::rand_core::OsRng;
 
     use super::*;
 
     #[test]
     fn csr_signature_is_der() {
-        let key = SignatureKind::Ecdsa(crate::key::EcdsaAlgorithm::P256).random();
+        let key: elliptic_curve::SecretKey<p256::NistP256> =
+            elliptic_curve::SecretKey::random(&mut OsRng);
+
+        let signing = ::ecdsa::SigningKey::from(&key);
 
         let mut csr = CertificateSigningRequest::new();
         csr.push("example.com");
 
-        let signed = csr.sign(&key);
+        let signed = csr.sign::<_, _, sha2::Sha256>(&signing);
 
         let csr = x509_cert::request::CertReq::from_der(signed.as_ref()).expect("valid CSR");
 

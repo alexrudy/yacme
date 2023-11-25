@@ -11,9 +11,10 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use pkcs8::DecodePrivateKey;
 use reqwest::Url;
 use serde::Serialize;
-use yacme::key::SignatureKind;
+use signature::rand_core::OsRng;
 use yacme::protocol::jose::AccountKeyIdentifier;
 use yacme::protocol::{Client, Request, Response};
 use yacme::schema::account::{Contacts, CreateAccount};
@@ -39,14 +40,10 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<yacme::key::SigningKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<p256::SecretKey> {
     let raw = read_string(path)?;
 
-    let key = yacme::key::SigningKey::from_pkcs8_pem(
-        &raw,
-        yacme::key::SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256),
-    )
-    .unwrap();
+    let key = p256::SecretKey::from_pkcs8_pem(&raw).unwrap();
 
     Ok(key)
 }
@@ -137,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Completing Authorizations");
     for authz_url in order.payload().authorizations() {
         let authz = client
-            .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
+            .execute::<_, _, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
             .await?;
         tracing::trace!("Authz:\n{authz:#?}");
 
@@ -164,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let chall_setup = Http01ChallengeSetup {
                 token: challenge.token().into(),
-                content: challenge.authorization(&key).deref().to_owned(),
+                content: challenge.authorization(key.deref()).deref().to_owned(),
             };
 
             tracing::trace!(
@@ -190,8 +187,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let challenge = client
-                .execute::<_, Challenge>(Request::post(
-                    ChallengeReadyRequest,
+                .execute::<_, _, Challenge>(Request::post(
+                    ChallengeReadyRequest::default(),
                     challenge.url(),
                     account_key.clone(),
                 ))
@@ -204,7 +201,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::debug!("Fetching authorization");
 
             let authz = client
-                .execute::<_, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
+                .execute::<_, _, Authorization>(Request::get(
+                    authz_url.clone(),
+                    account_key.clone(),
+                ))
                 .await?;
             tracing::trace!("Authz:\n{authz:#?}");
 
@@ -228,10 +228,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
-    let finalize = FinalizeOrder::new(order.payload(), &key);
+    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let finalize = FinalizeOrder::new(order.payload(), &signer);
     let mut order = client
-        .execute::<_, Order>(Request::post(
+        .execute::<_, _, Order>(Request::post(
             finalize,
             order.payload().finalize().clone(),
             account_key.clone(),
@@ -252,7 +253,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(certificate) = order.payload().certificate() {
         tracing::info!("Fetching certificate");
         let _cert = client
-            .execute::<_, CertificateChain>(Request::get(certificate.clone(), account_key.clone()))
+            .execute::<_, _, CertificateChain>(Request::get(
+                certificate.clone(),
+                account_key.clone(),
+            ))
             .await?;
 
         tracing::info!("Save certificate chain here");

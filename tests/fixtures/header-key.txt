@@ -1,4 +1,4 @@
-{
+base64url({
   "alg": "ES256",
   "jwk": {
     "crv": "P-256",
@@ -8,4 +8,4 @@
   },
   "nonce": "<nonce>",
   "url": "https://letsencrypt.test/new-orderz"
-}
+})

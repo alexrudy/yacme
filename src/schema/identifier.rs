@@ -3,7 +3,7 @@
 //! Identifiers are used to identify the subject of a certificate. Only DNS identifiers are supported
 //! by YACME.
 
-use crate::key::cert::RequestedSubjectName;
+use crate::cert::RequestedSubjectName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

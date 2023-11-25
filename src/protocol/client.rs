@@ -1,4 +1,5 @@
 //! Client for sending HTTP requests to an ACME server
+
 use http::HeaderMap;
 use reqwest::Certificate;
 use serde::Serialize;
@@ -10,7 +11,7 @@ use super::Request;
 use super::Url;
 
 #[cfg(feature = "trace-requests")]
-use super::fmt::AcmeFormat;
+use jaws::fmt::JWTFormat;
 
 #[cfg(feature = "trace-requests")]
 use super::request::Encode;
@@ -102,12 +103,12 @@ impl ClientBuilder {
 /// # use std::sync::Arc;
 /// # use yacme::protocol::Client;
 /// # use yacme::protocol::Request;
-/// # use yacme::key::{SignatureKind, EcdsaAlgorithm};
 /// # use yacme::protocol::Response;
+/// # use signature::rand_core::OsRng;
 /// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// let key = Arc::new(SignatureKind::Ecdsa(yacme::key::EcdsaAlgorithm::P256).random());
+/// let key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> = Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
 ///
 /// let mut client = Client::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
@@ -156,10 +157,16 @@ impl Client {
     /// Request payloads must be serializable, and request responses must implement [`Decode`].
     /// `Decode` is implemented for all types that implement [`serde::Deserialize`].
     #[cfg(any(not(feature = "trace-requests"), docs))]
-    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    pub async fn execute<P, K, R>(
+        &mut self,
+        request: Request<P, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: Decode,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         Response::from_decoded_response(self.execute_internal(request).await?).await
     }
@@ -169,10 +176,16 @@ impl Client {
     /// Tracing is done using the [RFC 8885](https://tools.ietf.org/html/rfc8885) format,
     /// via the `tracing` crate, at the `trace` level.
     #[cfg(all(feature = "trace-requests", not(docs)))]
-    pub async fn execute<P, R>(&mut self, request: Request<P>) -> Result<Response<R>, AcmeError>
+    pub async fn execute<P, K, R>(
+        &mut self,
+        request: Request<P, K>,
+    ) -> Result<Response<R>, AcmeError>
     where
         P: Serialize,
         R: Decode + Encode,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
@@ -184,12 +197,15 @@ impl Client {
     }
 
     #[inline]
-    async fn execute_internal<P>(
+    async fn execute_internal<P, K>(
         &mut self,
-        request: Request<P>,
+        request: Request<P, K>,
     ) -> Result<reqwest::Response, AcmeError>
     where
         P: Serialize,
+        K: jaws::algorithms::SigningAlgorithm,
+        K::Key: Clone,
+        K::Error: std::error::Error + Send + Sync + 'static,
     {
         let mut nonce = self.get_nonce().await?;
         loop {
@@ -207,6 +223,8 @@ impl Client {
                     tracing::trace!("Retrying request with next nonce");
                     nonce = self.get_nonce().await?;
                 } else {
+                    let text = String::from_utf8_lossy(&body);
+                    tracing::trace!(%error, "RES: \n{}", text);
                     return Err(error.into());
                 }
             }

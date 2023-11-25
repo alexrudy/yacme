@@ -21,9 +21,9 @@ Using the high level service interface, you can connect to letsencrypt (or reall
 ```rust no_run
 
 use std::sync::Arc;
-use yacme::key::{EcdsaAlgorithm, SignatureKind};
 use yacme::service::Authorization;
 use yacme::schema::challenges::ChallengeKind;
+use signature::rand_core::OsRng;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a random key to identify this account. Currently only ECDSA keys using
     // the P256 curve are supported.
-    let account_key = Arc::new(SignatureKind::Ecdsa(EcdsaAlgorithm::P256).random());
+    let account_key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> = Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
 
     // You should probably save this key somewhere:
     use pkcs8::{EncodePrivateKey, LineEnding};
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Get the authorizations
-    let mut authz: Vec<Authorization> = order.authorizations().await?;
+    let mut authz: Vec<Authorization<_>> = order.authorizations().await?;
     let auth = &mut authz[0];
     let mut chall = auth
         .challenge(&ChallengeKind::Http01)
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     auth.finalize().await?;
 
     // Set a certifiacte key
-    let cert_key = Arc::new(SignatureKind::Ecdsa(EcdsaAlgorithm::P256).random());
+    let cert_key: ::ecdsa::SigningKey<p256::NistP256> = ::elliptic_curve::SecretKey::random(&mut OsRng).into();
 
     // Finalize and fetch the order
     let cert = order.finalize_and_download(&cert_key).await?;
