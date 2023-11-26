@@ -19,7 +19,6 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::cert;
 use crate::protocol::{AcmeError, Result, Url};
 use crate::schema::directory::Directory;
 
@@ -86,7 +85,7 @@ impl Provider {
     /// Get or create an account
     pub fn account<K>(&self, key: Arc<K>) -> self::account::AccountBuilder<K>
     where
-        K: cert::KeyPair + Clone,
+        K: Clone,
     {
         self::account::AccountBuilder::new(self.clone(), key)
     }

@@ -5,7 +5,7 @@
 
 use std::ops::Deref;
 
-use base64ct::Encoding;
+use base64ct::Encoding as _;
 use chrono::{DateTime, Utc};
 use serde::ser::SerializeMap;
 use serde::{ser, Deserialize, Serialize};

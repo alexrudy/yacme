@@ -1,6 +1,6 @@
 //! Errors which occur when working with an ACME Protocol
 
-use http::HeaderValue;
+use reqwest::header::HeaderValue;
 use thiserror::Error;
 
 pub use self::acme::{AcmeErrorCode, AcmeErrorDocument};
@@ -105,11 +105,8 @@ impl From<AcmeErrorDocument> for AcmeError {
     }
 }
 
-impl<E> From<jaws::token::TokenSigningError<E>> for AcmeError
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    fn from(error: jaws::token::TokenSigningError<E>) -> Self {
+impl From<jaws::token::TokenSigningError> for AcmeError {
+    fn from(error: jaws::token::TokenSigningError) -> Self {
         match error {
             jaws::token::TokenSigningError::Signing(error) => {
                 AcmeError::Signing(signature::Error::from_source(error))

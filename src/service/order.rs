@@ -3,7 +3,6 @@
 //! Each order is for a single certificate chain, but that certificate chain
 //! may cover multiple DNS identities.
 
-use crate::cert;
 use crate::protocol::{AcmeError, Request, Response, Url};
 use crate::schema;
 use crate::schema::{
@@ -13,6 +12,8 @@ use crate::schema::{
     Identifier,
 };
 use chrono::{DateTime, Utc};
+use signature::Keypair;
+use x509_cert::spki::DynSignatureAlgorithmIdentifier;
 
 use super::{account::Account, authorization::Authorization, client::Client};
 
@@ -68,10 +69,7 @@ impl<'a, K> Order<'a, K> {
     /// Refresh the order information from the ACME provider.
     pub async fn refresh(&mut self) -> Result<(), AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let response: Response<schema::Order> = self
             .client()
@@ -88,10 +86,7 @@ impl<'a, K> Order<'a, K> {
     /// Fetch the authorizations for this order.
     pub async fn authorizations(&self) -> Result<Vec<Authorization<K>>, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let client = self.client();
         let mut authorizations = Vec::new();
@@ -116,10 +111,7 @@ impl<'a, K> Order<'a, K> {
         id: &Identifier,
     ) -> Result<Option<Authorization<K>>, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         Ok(self
             .authorizations()
@@ -133,15 +125,13 @@ impl<'a, K> Order<'a, K> {
     /// This does not download the certificate itself, see [`Order::download`] for that, or use the
     /// combined [`Order::finalize_and_download`] method to submit the certificate signing request,
     /// and asynchronously wait for the certificate to be ready for download.
-    pub async fn finalize<K2, S, D>(&mut self, key: &K2) -> Result<(), AcmeError>
+    pub async fn finalize<K2, S>(&mut self, key: &K2) -> Result<(), AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
-        K2: cert::CertificateKey<S, D>,
-        S: cert::Signature,
-        D: digest::Digest,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K2: signature::Signer<S> + Keypair + DynSignatureAlgorithmIdentifier,
+        K2::VerifyingKey:
+            x509_cert::spki::EncodePublicKey + crate::cert::DynSubjectPublicKeyInfoOwned,
+        S: x509_cert::spki::SignatureBitStringEncoding,
     {
         tracing::trace!("Creating CSR for finalization request");
 
@@ -160,10 +150,7 @@ impl<'a, K> Order<'a, K> {
 
     async fn poll_for_order_ready(&mut self) -> Result<(), AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         self.refresh().await?;
         match self.status() {
@@ -212,10 +199,7 @@ impl<'a, K> Order<'a, K> {
     /// (see [`Order::finalize`]), and the order must have finished processing, which
     pub async fn download(&self) -> Result<CertificateChain, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let order_info = &self.data;
         let Some(url) = order_info.certificate() else {
@@ -226,7 +210,7 @@ impl<'a, K> Order<'a, K> {
 
         request
             .headers_mut()
-            .insert(http::header::ACCEPT, CONTENT_PEM_CHAIN.parse().unwrap());
+            .insert(reqwest::header::ACCEPT, CONTENT_PEM_CHAIN.parse().unwrap());
         let certificate: Response<CertificateChain> = self.client().execute(request).await?;
 
         Ok(certificate.into_inner())
@@ -237,18 +221,16 @@ impl<'a, K> Order<'a, K> {
     /// This submits the certificate signing request, and then waits for the ACME
     /// provider to indicate that the certifiacte is done processing before returning
     /// the certificate chain.
-    pub async fn finalize_and_download<K2, S, D>(
+    pub async fn finalize_and_download<K2, S>(
         &mut self,
         key: &K2,
     ) -> Result<CertificateChain, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
-        K2: cert::CertificateKey<S, D>,
-        S: cert::Signature,
-        D: digest::Digest,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K2: signature::Signer<S> + Keypair + DynSignatureAlgorithmIdentifier,
+        K2::VerifyingKey:
+            x509_cert::spki::EncodePublicKey + crate::cert::DynSubjectPublicKeyInfoOwned,
+        S: x509_cert::spki::SignatureBitStringEncoding,
     {
         self.finalize(key).await?;
         self.poll_for_order_ready().await?;
@@ -312,10 +294,7 @@ impl<'a, K> OrderBuilder<'a, K> {
     /// Send the request to create an order, returning an [`Order`].
     pub async fn create(self) -> Result<Order<'a, K>, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let account = self.account;
         let payload = NewOrderRequest {
@@ -342,10 +321,7 @@ impl<'a, K> OrderBuilder<'a, K> {
     /// Get an existing order by URL
     pub async fn get(self, url: Url) -> Result<Order<'a, K>, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let order: Response<crate::schema::Order> = self
             .account
@@ -361,10 +337,7 @@ pub(crate) async fn list<K>(
     limit: Option<usize>,
 ) -> Result<Vec<Order<K>>, AcmeError>
 where
-    K: Clone,
-    K: jaws::algorithms::SigningAlgorithm,
-    K::Key: Clone,
-    K::Error: std::error::Error + Send + Sync + 'static,
+    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
 {
     let client = account.client();
     let mut request = Request::get(

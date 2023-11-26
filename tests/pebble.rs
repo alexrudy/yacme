@@ -26,6 +26,12 @@ async fn http01() {
     yacme::pebble::Pebble::new().down();
 }
 
+fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
+    Arc::new(ecdsa::SigningKey::from(
+        ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng),
+    ))
+}
+
 #[tracing::instrument("http01")]
 async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
     let pebble = yacme::pebble::Pebble::new();
@@ -38,7 +44,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let key = random_key();
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -96,11 +102,12 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
-    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
-        order.finalize_and_download(&signer),
+        order.finalize_and_download::<ecdsa::SigningKey<p256::NistP256>, ecdsa::der::Signature<_>>(
+            &certificate_key,
+        ),
     )
     .await
     .unwrap()?;
@@ -131,8 +138,7 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> =
-        Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
+    let key = random_key();
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -211,7 +217,7 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let key = Arc::new(p256::SecretKey::random(&mut OsRng));
+    let key = random_key();
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -269,11 +275,10 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
-    let signer = ecdsa::SigningKey::from(certificate_key.deref());
+    let certificate_key = Arc::new(rsa::pkcs1v15::SigningKey::random(&mut OsRng, 2048).unwrap());
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
-        order.finalize_and_download(&signer),
+        order.finalize_and_download::<rsa::pkcs1v15::SigningKey<sha2::Sha256>, rsa::pkcs1v15::Signature>(&certificate_key),
     )
     .await??;
     println!("{}", cert.to_pem_documents()?.join(""));

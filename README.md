@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a random key to identify this account. Currently only ECDSA keys using
     // the P256 curve are supported.
-    let account_key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> = Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
+    let account_key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
 
     // You should probably save this key somewhere:
     use pkcs8::{EncodePrivateKey, LineEnding};
@@ -68,10 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     auth.finalize().await?;
 
     // Set a certifiacte key
-    let cert_key: ::ecdsa::SigningKey<p256::NistP256> = ::elliptic_curve::SecretKey::random(&mut OsRng).into();
+    let cert_key: ::ecdsa::SigningKey<p256::NistP256> = ::ecdsa::SigningKey::random(&mut OsRng);
 
     // Finalize and fetch the order
-    let cert = order.finalize_and_download(&cert_key).await?;
+    let cert = order.finalize_and_download::<_, ecdsa::der::Signature<p256::NistP256>>(&cert_key).await?;
 
     Ok(())
 }
@@ -85,7 +85,7 @@ YACME is split into several levels of api:
 - `service` is the high level API, and provides a simple interface for issuing certificates.
 - `schema` provides all of the data structures to implement individual ACME endpoints.
 - `protocol` provides the JWT protocol used by ACME servers.
-- `key` provides support for ECDSA keys.
+- `cert` provides support for X.509 certificates.
 
 ## Goals
 

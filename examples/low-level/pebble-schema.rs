@@ -40,10 +40,10 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<p256::SecretKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<ecdsa::SigningKey<p256::NistP256>> {
     let raw = read_string(path)?;
 
-    let key = p256::SecretKey::from_pkcs8_pem(&raw).unwrap();
+    let key = ecdsa::SigningKey::<p256::NistP256>::from_pkcs8_pem(&raw).unwrap();
 
     Ok(key)
 }
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
+    let key = Arc::new(ecdsa::SigningKey::from(read_private_key(PRIVATE_KEY_PATH)?));
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -228,9 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
-    let signer = ecdsa::SigningKey::from(certificate_key.deref());
-    let finalize = FinalizeOrder::new(order.payload(), &signer);
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let finalize =
+        FinalizeOrder::new::<_, ecdsa::der::Signature<_>>(order.payload(), certificate_key.deref());
     let mut order = client
         .execute::<_, _, Order>(Request::post(
             finalize,
