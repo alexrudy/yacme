@@ -1,6 +1,6 @@
 [package]
 name = "yacme"
-version = "4.0.0"
+version = "4.1.0"
 edition = "2021"
 authors = ["Alex Rudy <opensource@alexrudy.net>"]
 license = "MIT"
