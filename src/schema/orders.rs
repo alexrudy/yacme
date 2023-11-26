@@ -5,12 +5,14 @@
 //! using the authorizations and challenges.
 
 use crate::cert::SignedCertificateRequest;
-use crate::protocol::Base64Data;
+use crate::protocol::Base64Signature;
 use chrono::{DateTime, Utc};
 use der::Decode;
 use der::EncodePem;
 use pem_rfc7468::PemLabel;
 use serde::{Deserialize, Serialize};
+use signature::Keypair;
+use x509_cert::spki::DynSignatureAlgorithmIdentifier;
 
 use super::identifier::Identifier;
 use crate::protocol::errors::AcmeError;
@@ -131,18 +133,19 @@ pub struct NewOrderRequest {
 /// The request sent to finalize an order, including the certificate signing request.
 #[derive(Debug, Clone, Serialize)]
 pub struct FinalizeOrder {
-    csr: Base64Data<SignedCertificateRequest>,
+    csr: Base64Signature<SignedCertificateRequest>,
 }
 
 impl FinalizeOrder {
     /// Create a new finalize order request from an order and a certificate signing key.
     ///
     /// The signing key used here **must** not be the same key used to identify the ACME account.
-    pub fn new<K, S, D>(order: &Order, key: &K) -> Self
+    pub fn new<K, S>(order: &Order, key: &K) -> Self
     where
-        K: crate::cert::CertificateKey<S, D>,
-        S: crate::cert::Signature,
-        D: digest::Digest,
+        K: signature::Signer<S> + Keypair + DynSignatureAlgorithmIdentifier,
+        K::VerifyingKey:
+            x509_cert::spki::EncodePublicKey + crate::cert::DynSubjectPublicKeyInfoOwned,
+        S: x509_cert::spki::SignatureBitStringEncoding,
     {
         let mut csr = crate::cert::CertificateSigningRequest::new();
 

@@ -20,8 +20,8 @@ pub mod response;
 
 pub use client::Client;
 pub use errors::AcmeError;
-pub use jaws::base64data::Base64Data;
 pub use jaws::base64data::Base64JSON;
+pub use jaws::base64data::Base64Signature;
 
 #[doc(no_inline)]
 pub use request::Request;
@@ -36,9 +36,9 @@ pub type Result<T> = ::std::result::Result<T, AcmeError>;
 /// a [`std::fmt::Debug`] implementation which prints the
 /// full URL (rather than the parsed parts) for compactness.
 ///
-/// This tries to be a drop-in replacement for [`url::Url`].
+/// This tries to be a drop-in replacement for [`reqwest::Url`].
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct Url(url::Url);
+pub struct Url(reqwest::Url);
 
 impl Url {
     /// Underlying string representation of the URL.
@@ -58,19 +58,19 @@ impl Url {
 }
 
 impl Deref for Url {
-    type Target = url::Url;
+    type Target = reqwest::Url;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl From<url::Url> for Url {
-    fn from(value: url::Url) -> Self {
+impl From<reqwest::Url> for Url {
+    fn from(value: reqwest::Url) -> Self {
         Url(value)
     }
 }
 
-impl From<Url> for url::Url {
+impl From<Url> for reqwest::Url {
     fn from(value: Url) -> Self {
         value.0
     }
@@ -89,7 +89,7 @@ impl std::fmt::Debug for Url {
 }
 
 impl FromStr for Url {
-    type Err = url::ParseError;
+    type Err = <reqwest::Url as FromStr>::Err;
 
     fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
         s.parse().map(Url)
@@ -129,10 +129,10 @@ pub(crate) mod test {
             }
 
             let (code, _reason) = status.split_once(' ').unwrap();
-            http::StatusCode::from_u16(code.parse().unwrap()).unwrap()
+            reqwest::StatusCode::from_u16(code.parse().unwrap()).unwrap()
         };
 
-        let mut headers = http::HeaderMap::new();
+        let mut headers = reqwest::header::HeaderMap::new();
 
         for line in lines.by_ref() {
             if line.is_empty() {
@@ -140,7 +140,7 @@ pub(crate) mod test {
             } else {
                 let (name, value) = line.trim().split_once(": ").unwrap();
                 headers.append(
-                    http::header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                    reqwest::header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
                     value.parse().unwrap(),
                 );
             }

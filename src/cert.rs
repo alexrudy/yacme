@@ -2,18 +2,14 @@
 
 use std::fmt;
 
-use const_oid::AssociatedOid;
-use der::{
+use signature::SignatureEncoding;
+use x509_cert::der::{
     asn1::{Ia5StringRef, SetOfVec},
     Encode, FixedTag,
 };
-use sha2::Digest;
-use signature::DigestSigner;
 use x509_cert::ext::pkix;
-
-mod ecdsa;
-mod rsa;
-
+use x509_cert::ext::AsExtension;
+use x509_cert::spki::SignatureBitStringEncoding;
 const PEM_TAG_CSR: &str = "CERTIFICATE REQUEST";
 
 /// Name to be certified by the certificate issued from this request.
@@ -45,26 +41,21 @@ impl From<&str> for RequestedSubjectName {
     }
 }
 
-pub trait PublicKey {
-    fn as_bytes(&self) -> Box<[u8]>;
+/// Trait to represent dynamically supplying SPKI for X.509 certificates
+///
+/// This trait is implemented for all types which implement [`EncodePublicKey`][x509_cert::spki::EncodePublicKey]
+pub trait DynSubjectPublicKeyInfoOwned {
+    /// Get the Subject Public Key Info for this type
+    fn subject_public_key_info(&self) -> x509_cert::spki::SubjectPublicKeyInfoOwned;
 }
 
-pub trait KeyPair {
-    type PublicKey: PublicKey;
-
-    fn public_key(&self) -> Self::PublicKey;
-}
-
-pub trait CertificateKey<S, D>: KeyPair + DigestSigner<D, S>
+impl<S> DynSubjectPublicKeyInfoOwned for S
 where
-    S: Signature,
-    D: Digest,
+    S: x509_cert::spki::EncodePublicKey,
 {
-    fn algorithm(&self) -> spki::AlgorithmIdentifierOwned;
-}
-
-pub trait Signature {
-    fn to_der(&self) -> der::Document;
+    fn subject_public_key_info(&self) -> x509_cert::spki::SubjectPublicKeyInfoOwned {
+        self.to_public_key_der().unwrap().decode_msg().unwrap()
+    }
 }
 
 /// The informational data in a certificate signing request sufficient to
@@ -107,38 +98,29 @@ impl CertificateSigningRequest {
         self.names.push(name.into())
     }
 
-    /// Sign this request with a [`CertificateKey`], creating an X.509 certificate
+    /// Sign this request with an appropriate key, creating an X.509 certificate
     /// singing request, which will be serialized using ASN.1 DER
     ///
-    /// The [`CertificateKey`] here should not be the same as the account key used
+    /// The cryptographic key here should not be the same as the account key used
     /// in the rest of the ACME protocol.
-    pub fn sign<K, S, D>(self, key: &K) -> SignedCertificateRequest
+    ///
+    /// # Panics
+    ///
+    /// Any errors in the cryptographic signing process, as well as any encoding
+    /// errors, will panic.
+    pub fn sign<K, S>(self, key: &K) -> SignedCertificateRequest
     where
-        K: CertificateKey<S, D>,
-        S: Signature,
-        D: Digest,
+        K: signature::Keypair
+            + signature::Signer<S>
+            + x509_cert::spki::DynSignatureAlgorithmIdentifier,
+        K::VerifyingKey: DynSubjectPublicKeyInfoOwned,
+        S: SignatureBitStringEncoding,
     {
+        //TODO: Raise errors instead of panicking here?
+
         // CSR needs the public key info to know who signed it.
-        let public_key = key.public_key();
-        // let algorithm = public_key.algorithm();
-
-        // let spki_public_key_data = {
-        //     let mut buf = Vec::with_capacity(public_key.as_bytes().len() + 1);
-        //     BitStringRef::from_bytes(&public_key.as_bytes())
-        //         .unwrap()
-        //         .encode_to_vec(&mut buf)
-        //         .unwrap();
-        //     buf
-        // };
-
-        let bytes = public_key.as_bytes();
-
-        let spki = spki::SubjectPublicKeyInfoOwned {
-            algorithm: key.algorithm(),
-            subject_public_key: der::asn1::BitString::from_bytes(&bytes).unwrap(),
-        };
-
-        // let spki = pkcs8::SubjectPublicKeyInfo::try_from(spki_document.as_bytes()).unwrap();
+        let verifying_key = key.verifying_key();
+        let spki = verifying_key.subject_public_key_info();
 
         // CSR needs a list of Subject Alternative Names as GeneralName entries
         // with DNS specified.
@@ -156,18 +138,13 @@ impl CertificateSigningRequest {
 
         // Encode the SubjectAltNames using ASN.1 DER
 
-        let san = pkix::SubjectAltName::from(san_names)
-            .to_der()
-            .expect("DER encoded SAN");
+        let san = pkix::SubjectAltName::from(san_names);
+        let name: x509_cert::name::Name = Default::default();
 
         // Set up an X.509 extension with the SAN, and mark it as critical
         // (since the subject will be empty, this extension is required for
         // the CSR to be meaningful).
-        let extension = x509_cert::ext::Extension {
-            extn_id: pkix::SubjectAltName::OID,
-            critical: true,
-            extn_value: der::asn1::OctetString::new(san).unwrap(),
-        };
+        let extension = san.to_extension(&name, &[]).expect("valid exetnsions");
 
         // Encode the extension using ASN.1 DER
         let extension_der = extension.to_der().unwrap();
@@ -200,29 +177,27 @@ impl CertificateSigningRequest {
 
         // Digest sign the CSR target
         let csr_target = csr_info.to_der().expect("Valid encoding");
-        let mut digest = D::new();
-        digest.update(&csr_target);
 
-        let signature = key.sign_digest(digest);
+        let signature = key.sign(&csr_target);
 
         // Create the final CSR, containing in the info and the signature.
         let csr = x509_cert::request::CertReq {
             info: csr_info,
-            algorithm: key.algorithm(),
-            signature: der::asn1::BitString::new(0, signature.to_der().as_bytes())
-                .expect("valid signature"),
+            algorithm: key.signature_algorithm_identifier().unwrap(),
+            signature: signature.to_bitstring().unwrap(),
         };
 
+        //TODO: Maybe don't pre-encode here, and delay encoding until the requires fires?
         let mut buf = Vec::new();
         csr.encode_to_vec(&mut buf).expect("successful encoding");
 
-        SignedCertificateRequest(buf)
+        SignedCertificateRequest(buf.into())
     }
 }
 
 /// A certificate request, cryptographcially signed, and encoded as ASN.1 DER
 #[derive(Debug, Clone)]
-pub struct SignedCertificateRequest(Vec<u8>);
+pub struct SignedCertificateRequest(Box<[u8]>);
 
 impl SignedCertificateRequest {
     /// Encode this CSR as a PEM document.
@@ -232,10 +207,32 @@ impl SignedCertificateRequest {
     }
 }
 
-impl AsRef<[u8]> for SignedCertificateRequest {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
+impl From<Box<[u8]>> for SignedCertificateRequest {
+    fn from(value: Box<[u8]>) -> Self {
+        SignedCertificateRequest(value)
     }
+}
+
+impl From<Vec<u8>> for SignedCertificateRequest {
+    fn from(value: Vec<u8>) -> Self {
+        SignedCertificateRequest(value.into_boxed_slice())
+    }
+}
+
+impl From<SignedCertificateRequest> for Box<[u8]> {
+    fn from(value: SignedCertificateRequest) -> Self {
+        value.0
+    }
+}
+
+impl<'a> From<&'a [u8]> for SignedCertificateRequest {
+    fn from(value: &'a [u8]) -> Self {
+        SignedCertificateRequest(value.into())
+    }
+}
+
+impl SignatureEncoding for SignedCertificateRequest {
+    type Repr = Box<[u8]>;
 }
 
 #[cfg(test)]
@@ -247,17 +244,18 @@ mod test {
 
     #[test]
     fn csr_signature_is_der() {
-        let key: elliptic_curve::SecretKey<p256::NistP256> =
-            elliptic_curve::SecretKey::random(&mut OsRng);
-
-        let signing = ::ecdsa::SigningKey::from(&key);
+        let key: ecdsa::SigningKey<p256::NistP256> = ecdsa::SigningKey::random(&mut OsRng);
 
         let mut csr = CertificateSigningRequest::new();
         csr.push("example.com");
 
-        let signed = csr.sign::<_, _, sha2::Sha256>(&signing);
+        let signed = csr
+            .sign::<::ecdsa::SigningKey<p256::NistP256>, ::ecdsa::der::Signature<p256::NistP256>>(
+                &key,
+            );
 
-        let csr = x509_cert::request::CertReq::from_der(signed.as_ref()).expect("valid CSR");
+        let csr =
+            x509_cert::request::CertReq::from_der(signed.to_bytes().as_ref()).expect("valid CSR");
 
         let doc = csr.signature.as_bytes().unwrap();
         let _ = der::Document::from_der(doc).expect("valid DER");

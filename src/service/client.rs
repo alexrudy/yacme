@@ -28,9 +28,7 @@ impl Client {
         request: Request<T, K>,
     ) -> Result<Response<R>, AcmeError>
     where
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
         T: Serialize,
         R: Decode + Encode,
     {
@@ -44,9 +42,7 @@ impl Client {
         request: Request<T, K>,
     ) -> Result<Response<R>, AcmeError>
     where
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
         T: Serialize,
         R: Decode,
     {

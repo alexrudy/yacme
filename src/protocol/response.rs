@@ -12,7 +12,7 @@
 use std::fmt::Write;
 
 use chrono::{DateTime, Utc};
-use http::HeaderMap;
+use reqwest::header::HeaderMap;
 use serde::de::DeserializeOwned;
 
 use super::fmt::HttpCase;
@@ -47,8 +47,8 @@ where
 #[derive(Debug, Clone)]
 pub struct Response<T> {
     url: Url,
-    status: http::StatusCode,
-    headers: http::HeaderMap,
+    status: reqwest::StatusCode,
+    headers: reqwest::header::HeaderMap,
     payload: T,
 }
 
@@ -75,8 +75,8 @@ where
 }
 
 impl<T> Response<T> {
-    /// Response [`http::StatusCode`]
-    pub fn status(&self) -> http::StatusCode {
+    /// Response [`reqwest::StatusCode`]
+    pub fn status(&self) -> reqwest::StatusCode {
         self.status
     }
 
@@ -93,7 +93,7 @@ impl<T> Response<T> {
     /// The seconds to wait for a retry, from now.
     pub fn retry_after(&self) -> Option<std::time::Duration> {
         self.headers()
-            .get(http::header::RETRY_AFTER)
+            .get(reqwest::header::RETRY_AFTER)
             .and_then(|v| v.to_str().ok())
             .and_then(|v| {
                 if v.contains("GMT") {
@@ -117,30 +117,36 @@ impl<T> Response<T> {
 
     /// The URL from the `Location` HTTP header.
     pub fn location(&self) -> Option<Url> {
-        self.headers.get(http::header::LOCATION).map(|value| {
+        self.headers.get(reqwest::header::LOCATION).map(|value| {
             value
                 .to_str()
                 .unwrap_or_else(|_| {
-                    panic!("valid text encoding in {} header", http::header::LOCATION)
+                    panic!(
+                        "valid text encoding in {} header",
+                        reqwest::header::LOCATION
+                    )
                 })
                 .parse()
-                .unwrap_or_else(|_| panic!("valid URL in {} header", http::header::LOCATION))
+                .unwrap_or_else(|_| panic!("valid URL in {} header", reqwest::header::LOCATION))
         })
     }
 
     /// The [`mime::Mime`] from the `Content-Type` header.
     pub fn content_type(&self) -> Option<mime::Mime> {
-        self.headers.get(http::header::CONTENT_TYPE).map(|v| {
+        self.headers.get(reqwest::header::CONTENT_TYPE).map(|v| {
             v.to_str()
                 .unwrap_or_else(|_| {
                     panic!(
                         "valid text encoding in {} header",
-                        http::header::CONTENT_TYPE
+                        reqwest::header::CONTENT_TYPE
                     )
                 })
                 .parse()
                 .unwrap_or_else(|_| {
-                    panic!("valid MIME type in {} header", http::header::CONTENT_TYPE)
+                    panic!(
+                        "valid MIME type in {} header",
+                        reqwest::header::CONTENT_TYPE
+                    )
                 })
         })
     }

@@ -10,14 +10,12 @@ async fn main() {
             env!("CARGO_MANIFEST_DIR"),
             "/reference-keys/ec-p255-cert.pem"
         ));
-        p256::SecretKey::from_pkcs8_pem(pem).unwrap()
+        ecdsa::SigningKey::<p256::NistP256>::from_pkcs8_pem(pem).unwrap()
     };
-
-    let signer = ecdsa::SigningKey::from(&key);
 
     let mut csr = CertificateSigningRequest::new();
     csr.push("www.example.org");
     csr.push("internal.example.org");
-    let signed = csr.sign(&signer);
+    let signed = csr.sign::<_, ecdsa::der::Signature<_>>(&key);
     println!("{}", signed.to_pem());
 }

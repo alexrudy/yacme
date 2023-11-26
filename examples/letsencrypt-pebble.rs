@@ -33,10 +33,10 @@ fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(buf)
 }
 
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<p256::SecretKey> {
+fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<SigningKey<p256::NistP256>> {
     let raw = read_string(path)?;
 
-    let key = p256::SecretKey::from_pkcs8_pem(&raw).unwrap();
+    let key = ecdsa::SigningKey::from_pkcs8_pem(&raw).unwrap();
 
     Ok(key)
 }
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .challenge(&ChallengeKind::Http01)
             .ok_or("No http01 challenge provided")?;
         let inner = chall.http01().unwrap();
-        http01_challenge_response(&inner, &account.key().deref().into()).await?;
+        http01_challenge_response(&inner, &account.key()).await?;
 
         chall.ready().await?;
         auth.finalize().await?;
@@ -105,9 +105,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(p256::SecretKey::random(&mut OsRng));
-    let signer = ecdsa::SigningKey::from(certificate_key.deref());
-    let cert = order.finalize_and_download(&signer).await?;
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let cert = order
+        .finalize_and_download::<ecdsa::SigningKey::<p256::NistP256>, ecdsa::der::Signature<p256::NistP256>>(&certificate_key)
+        .await?;
 
     println!("{}", cert.to_pem_documents()?.join(""));
 

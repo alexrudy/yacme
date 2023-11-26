@@ -1,6 +1,6 @@
 //! Client for sending HTTP requests to an ACME server
 
-use http::HeaderMap;
+use reqwest::header::HeaderMap;
 use reqwest::Certificate;
 use serde::Serialize;
 
@@ -108,7 +108,7 @@ impl ClientBuilder {
 /// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// let key: Arc<::elliptic_curve::SecretKey<p256::NistP256>> = Arc::new(::elliptic_curve::SecretKey::random(&mut OsRng));
+/// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
 ///
 /// let mut client = Client::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
@@ -164,9 +164,7 @@ impl Client {
     where
         P: Serialize,
         R: Decode,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         Response::from_decoded_response(self.execute_internal(request).await?).await
     }
@@ -183,9 +181,7 @@ impl Client {
     where
         P: Serialize,
         R: Decode + Encode,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
@@ -203,9 +199,7 @@ impl Client {
     ) -> Result<reqwest::Response, AcmeError>
     where
         P: Serialize,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let mut nonce = self.get_nonce().await?;
         loop {

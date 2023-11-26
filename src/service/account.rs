@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use jaws::key::SerializeJWK;
 
-use crate::cert::KeyPair;
 use crate::protocol::{request::Key, AcmeError, Request, Response, Url};
 use crate::schema::{
     self,
     account::{Contacts, CreateAccount, ExternalAccountBindingRequest},
     directory::Directory,
 };
+use signature::Keypair;
 
 use super::{
     order::{Order, OrderBuilder},
@@ -54,9 +54,7 @@ where
     /// Refresh this account's data from the ACME service
     pub async fn refresh(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let response: Response<schema::Account> = self
             .client()
@@ -102,10 +100,7 @@ where
     /// Get a list of orders associated with this account
     pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order<K>>, AcmeError>
     where
-        K: Clone,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let orders = super::order::list(self, limit).await?;
 
@@ -126,7 +121,7 @@ pub struct AccountBuilder<K> {
 
 impl<K> AccountBuilder<K>
 where
-    K: KeyPair + Clone,
+    K: Clone,
 {
     pub(crate) fn new(provider: Provider, key: Arc<K>) -> Self {
         AccountBuilder {
@@ -161,7 +156,10 @@ where
     }
 
     /// Add a contact email address to the account, which will be converted to a mailto: URL.
-    pub fn add_contact_email(mut self, email: &str) -> Result<Self, url::ParseError> {
+    pub fn add_contact_email(
+        mut self,
+        email: &str,
+    ) -> Result<Self, <reqwest::Url as std::str::FromStr>::Err> {
         self.contact.add_contact_email(email)?;
         Ok(self)
     }
@@ -178,14 +176,12 @@ where
     /// If [`AccountBuilder::must_exist`] is set, this method acts like [`AccountBuilder::get`].
     pub async fn create(self) -> Result<Account<K>, AcmeError>
     where
-        K: KeyPair,
-        K::PublicKey: SerializeJWK,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: Keypair,
+        K::VerifyingKey: SerializeJWK,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let url = self.provider.directory().new_account.clone();
-        let public_key = self.key.public_key();
+        let public_key = self.key.verifying_key();
         let payload = CreateAccount {
             contact: self.contact,
             terms_of_service_agreed: self.terms_of_service_agreed,
@@ -218,11 +214,9 @@ where
     /// Uses `only_return_existing`, overriding the value set by [`AccountBuilder::must_exist`].
     pub async fn get(mut self) -> Result<Account<K>, AcmeError>
     where
-        K: KeyPair,
-        K::PublicKey: SerializeJWK,
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: Keypair,
+        K::VerifyingKey: SerializeJWK,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         self.only_return_existing = Some(true);
         self.create().await
@@ -256,9 +250,7 @@ where
     /// Update account information with the ACME provider.
     pub async fn update(self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::SigningAlgorithm,
-        K::Key: Clone,
-        K::Error: std::error::Error + Send + Sync + 'static,
+        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
     {
         let url = self.account.url().clone();
         let key = self.account.key.clone();
