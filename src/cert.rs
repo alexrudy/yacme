@@ -94,11 +94,16 @@ impl CertificateSigningRequest {
         self.names.push(name.into())
     }
 
-    /// Sign this request with a [`CertificateKey`], creating an X.509 certificate
+    /// Sign this request with an appropriate key, creating an X.509 certificate
     /// singing request, which will be serialized using ASN.1 DER
     ///
-    /// The [`CertificateKey`] here should not be the same as the account key used
+    /// The cryptographic key here should not be the same as the account key used
     /// in the rest of the ACME protocol.
+    ///
+    /// # Panics
+    ///
+    /// Any errors in the cryptographic signing process, as well as any encoding
+    /// errors, will panic.
     pub fn sign<K, S>(self, key: &K) -> SignedCertificateRequest
     where
         K: signature::Keypair
