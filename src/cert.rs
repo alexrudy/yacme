@@ -41,7 +41,11 @@ impl From<&str> for RequestedSubjectName {
     }
 }
 
+/// Trait to represent dynamically supplying SPKI for X.509 certificates
+///
+/// This trait is implemented for all types which implement [`EncodePublicKey`][x509_cert::spki::EncodePublicKey]
 pub trait DynSubjectPublicKeyInfoOwned {
+    /// Get the Subject Public Key Info for this type
     fn subject_public_key_info(&self) -> x509_cert::spki::SubjectPublicKeyInfoOwned;
 }
 

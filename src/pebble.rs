@@ -133,6 +133,7 @@ impl Pebble {
         }
     }
 
+    /// Wait for the pebble server to be ready.
     pub async fn ready(&self) -> Result<(), reqwest::Error> {
         let client = reqwest::Client::builder()
             .add_root_certificate(self.certificate())
