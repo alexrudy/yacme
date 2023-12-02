@@ -28,10 +28,7 @@ pub struct Account<K> {
     url: Url,
 }
 
-impl<K> Account<K>
-where
-    K: Clone,
-{
+impl<K> Account<K> {
     fn new(provider: Provider, key: Arc<K>, data: schema::Account, url: Url) -> Self {
         Self {
             provider,
@@ -54,7 +51,7 @@ where
     /// Refresh this account's data from the ACME service
     pub async fn refresh(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let response: Response<schema::Account> = self
             .client()
@@ -100,7 +97,7 @@ where
     /// Get a list of orders associated with this account
     pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order<K>>, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let orders = super::order::list(self, limit).await?;
 
@@ -178,7 +175,7 @@ where
     where
         K: Keypair,
         K::VerifyingKey: SerializeJWK,
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let url = self.provider.directory().new_account.clone();
         let public_key = self.key.verifying_key();
@@ -216,7 +213,7 @@ where
     where
         K: Keypair,
         K::VerifyingKey: SerializeJWK,
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         self.only_return_existing = Some(true);
         self.create().await
@@ -230,10 +227,7 @@ pub struct UpdateAccount<'a, K> {
     account: &'a mut Account<K>,
 }
 
-impl<'a, K> UpdateAccount<'a, K>
-where
-    K: Clone,
-{
+impl<'a, K> UpdateAccount<'a, K> {
     fn new(account: &'a mut Account<K>) -> Self {
         UpdateAccount {
             contact: account.data().contact.clone(),
@@ -250,7 +244,7 @@ where
     /// Update account information with the ACME provider.
     pub async fn update(self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let url = self.account.url().clone();
         let key = self.account.key.clone();

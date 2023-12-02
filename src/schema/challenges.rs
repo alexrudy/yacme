@@ -7,9 +7,10 @@ use std::ops::Deref;
 
 use base64ct::Encoding as _;
 use chrono::{DateTime, Utc};
+use jaws::key::JsonWebKey;
 use serde::ser::SerializeMap;
 use serde::{ser, Deserialize, Serialize};
-use sha2::Digest;
+use sha2::{Digest, Sha256};
 
 use crate::protocol::errors::AcmeErrorDocument;
 use crate::protocol::Url;
@@ -169,9 +170,11 @@ pub struct KeyAuthorization(String);
 impl KeyAuthorization {
     fn new<K>(token: &str, key: &K) -> KeyAuthorization
     where
-        K: jaws::key::SerializeJWK,
+        K: jaws::key::SerializePublicJWK,
     {
-        let thumb = jaws::key::Thumbprinter::<sha2::Sha256, _>::new(key).thumbprint();
+        let thumb: jaws::key::Thumbprint<Sha256> =
+            jaws::key::Thumbprint::from_jwk(&JsonWebKey::build_public(key))
+                .expect("invalid key for thumbprint");
         KeyAuthorization(format!("{token}.{thumb}"))
     }
 }
@@ -215,7 +218,7 @@ impl Http01Challenge {
     /// Get the key authorization, used to validate the challenge.
     pub fn authorization<K>(&self, account_key: &K) -> KeyAuthorization
     where
-        K: jaws::key::SerializeJWK,
+        K: jaws::key::SerializePublicJWK,
     {
         KeyAuthorization::new(&self.token, account_key)
     }
@@ -272,7 +275,7 @@ impl Dns01Challenge {
     /// The value of the DNS TXT record that should be created.
     pub fn digest<K>(&self, account_key: &K) -> String
     where
-        K: jaws::key::SerializeJWK,
+        K: jaws::key::SerializePublicJWK,
     {
         let digest = sha2::Sha256::digest(self.authorization(account_key).as_bytes());
         base64ct::Base64UrlUnpadded::encode_string(&digest)
@@ -281,7 +284,7 @@ impl Dns01Challenge {
     /// The key authorization object for this challenge.
     pub fn authorization<K>(&self, account_key: &K) -> KeyAuthorization
     where
-        K: jaws::key::SerializeJWK,
+        K: jaws::key::SerializePublicJWK,
     {
         KeyAuthorization::new(&self.token, account_key)
     }

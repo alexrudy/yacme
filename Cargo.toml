@@ -20,7 +20,12 @@ chrono = { version = "0.4", features = ["serde"] }
 const-oid = { version = "0.9", features = ["db"] }
 der = { version = "0.7", features = ["std", "pem", "oid"] }
 http = { version = "0.2", optional = true }
-jaws = { version = "0.8" }
+jaws = { version = "1.0.0-alpha.1", features = [
+    "ecdsa",
+    "p256",
+    "rsa",
+    "hmac",
+] }
 lazy_static = { version = "1", optional = true }
 mime = "0.3"
 pem-rfc7468 = { version = "0.7", features = ["std"] }

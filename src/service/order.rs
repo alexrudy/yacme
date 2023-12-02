@@ -33,10 +33,7 @@ impl<'a, K> Order<'a, K> {
     }
 
     #[inline]
-    pub(crate) fn client(&self) -> &Client
-    where
-        K: Clone,
-    {
+    pub(crate) fn client(&self) -> &Client {
         self.account.client()
     }
 
@@ -69,7 +66,7 @@ impl<'a, K> Order<'a, K> {
     /// Refresh the order information from the ACME provider.
     pub async fn refresh(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let response: Response<schema::Order> = self
             .client()
@@ -86,7 +83,7 @@ impl<'a, K> Order<'a, K> {
     /// Fetch the authorizations for this order.
     pub async fn authorizations(&self) -> Result<Vec<Authorization<K>>, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let client = self.client();
         let mut authorizations = Vec::new();
@@ -111,7 +108,7 @@ impl<'a, K> Order<'a, K> {
         id: &Identifier,
     ) -> Result<Option<Authorization<K>>, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         Ok(self
             .authorizations()
@@ -127,7 +124,7 @@ impl<'a, K> Order<'a, K> {
     /// and asynchronously wait for the certificate to be ready for download.
     pub async fn finalize<K2, S>(&mut self, key: &K2) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
         K2: signature::Signer<S> + Keypair + DynSignatureAlgorithmIdentifier,
         K2::VerifyingKey:
             x509_cert::spki::EncodePublicKey + crate::cert::DynSubjectPublicKeyInfoOwned,
@@ -150,7 +147,7 @@ impl<'a, K> Order<'a, K> {
 
     async fn poll_for_order_ready(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         self.refresh().await?;
         match self.status() {
@@ -199,7 +196,7 @@ impl<'a, K> Order<'a, K> {
     /// (see [`Order::finalize`]), and the order must have finished processing, which
     pub async fn download(&self) -> Result<CertificateChain, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let order_info = &self.data;
         let Some(url) = order_info.certificate() else {
@@ -226,7 +223,7 @@ impl<'a, K> Order<'a, K> {
         key: &K2,
     ) -> Result<CertificateChain, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
         K2: signature::Signer<S> + Keypair + DynSignatureAlgorithmIdentifier,
         K2::VerifyingKey:
             x509_cert::spki::EncodePublicKey + crate::cert::DynSubjectPublicKeyInfoOwned,
@@ -294,7 +291,7 @@ impl<'a, K> OrderBuilder<'a, K> {
     /// Send the request to create an order, returning an [`Order`].
     pub async fn create(self) -> Result<Order<'a, K>, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let account = self.account;
         let payload = NewOrderRequest {
@@ -321,7 +318,7 @@ impl<'a, K> OrderBuilder<'a, K> {
     /// Get an existing order by URL
     pub async fn get(self, url: Url) -> Result<Order<'a, K>, AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let order: Response<crate::schema::Order> = self
             .account
@@ -337,7 +334,7 @@ pub(crate) async fn list<K>(
     limit: Option<usize>,
 ) -> Result<Vec<Order<K>>, AcmeError>
 where
-    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+    K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
     let client = account.client();
     let mut request = Request::get(
