@@ -14,10 +14,10 @@ pub mod external {
     //! External account binding to connect provider accounts to ACME accounts.
 
     use jaws::algorithms::hmac::HmacKey;
+    use jaws::base64data::Base64Data;
     use jaws::key::JsonWebKey;
-    use jaws::key::JsonWebKeyBuilder;
-    use jaws::key::SerializeJWK;
     use jaws::token::Signed;
+    use jaws::SignatureBytes;
 
     use jaws::Flat;
     use jaws::Token;
@@ -120,7 +120,7 @@ pub mod external {
         /// The idnetifier provided by the ACME provider for the external account.
         pub id: ExternalAccountId,
         /// The key provided by the ACME provider used to sign the binding request.
-        pub key: Base64Signature<HmacKey>,
+        pub key: Base64Data<HmacKey>,
     }
 
     impl ExternalAccountBindingRequest {
@@ -131,7 +131,7 @@ pub mod external {
         {
             Self {
                 id,
-                key: Base64Signature(key.into()),
+                key: Base64Data(key.into()),
             }
         }
 
@@ -139,19 +139,17 @@ pub mod external {
         /// account.
         pub fn token<K>(&self, public_key: &K, url: Url) -> ExternalAccountToken
         where
-            K: SerializeJWK,
+            K: jaws::key::SerializeJWK,
         {
-            let mut token = Token::flat(
-                RequestHeader::new(url, None),
-                JsonWebKeyBuilder::from(public_key).into(),
-            );
+            let mut token =
+                Token::flat(RequestHeader::new(url, None), JsonWebKey::build(public_key));
 
             *token.header_mut().key_id() = Some(self.id.0.clone());
 
             let key = jaws::algorithms::hmac::HmacKey::from(self.key.as_ref());
             let mac = HmacSha256::new(key);
 
-            let signed = token.sign(&mac).unwrap();
+            let signed = token.sign::<_, SignatureBytes>(&mac).unwrap();
 
             ExternalAccountToken(signed)
         }
@@ -185,7 +183,7 @@ pub mod external {
             let account_key = crate::key!("ec-p255");
             let public_key = account_key.verifying_key();
             let url = Url::from_str("https://example.com").unwrap();
-            let token = request.token(&public_key, url);
+            let token = request.token(public_key, url);
 
             eprintln!("{}", token.0.formatted());
 
@@ -423,7 +421,7 @@ mod test {
         let mut token = Token::flat(header, payload);
         token.header_mut().key().derived();
 
-        let signed_token = token.sign(key.deref()).unwrap();
+        let signed_token = token.sign::<_, jaws::SignatureBytes>(key.deref()).unwrap();
 
         eprintln!("{}", signed_token.formatted());
         let serialized = serde_json::to_value(signed_token).unwrap();

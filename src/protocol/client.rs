@@ -164,7 +164,7 @@ impl Client {
     where
         P: Serialize,
         R: Decode,
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         Response::from_decoded_response(self.execute_internal(request).await?).await
     }
@@ -181,7 +181,7 @@ impl Client {
     where
         P: Serialize,
         R: Decode + Encode,
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
@@ -199,7 +199,7 @@ impl Client {
     ) -> Result<reqwest::Response, AcmeError>
     where
         P: Serialize,
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let mut nonce = self.get_nonce().await?;
         loop {

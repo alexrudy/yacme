@@ -39,10 +39,7 @@ impl<'o, K> Authorization<'o, K> {
     }
 
     #[inline]
-    pub(crate) fn client(&self) -> &Client
-    where
-        K: Clone,
-    {
+    pub(crate) fn client(&self) -> &Client {
         self.order.client()
     }
 
@@ -85,7 +82,7 @@ impl<'o, K> Authorization<'o, K> {
     /// Refresh the authorization data from the ACME provider.
     pub async fn refresh(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let response: Response<schema::authorizations::Authorization> = self
             .client()
@@ -103,7 +100,7 @@ impl<'o, K> Authorization<'o, K> {
     #[tracing::instrument(skip(self), level = "debug", fields(identifier = %self.data().identifier))]
     pub async fn finalize(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         tracing::debug!("Polling authorization resource to check for status updates");
 
@@ -175,10 +172,7 @@ impl<'a, 'c: 'a, K> Challenge<'a, 'c, K> {
     }
 
     #[inline]
-    pub(crate) fn client(&self) -> &Client
-    where
-        K: Clone,
-    {
+    pub(crate) fn client(&self) -> &Client {
         self.auth.client()
     }
 
@@ -210,7 +204,7 @@ impl<'a, 'c: 'a, K> Challenge<'a, 'c, K> {
     /// Notify the server that the challenge is ready.
     pub async fn ready(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let name = self.data().name().unwrap_or("<unknown>");
         tracing::trace!("POST to notify that challenge {} is ready", name);
@@ -234,7 +228,7 @@ impl<'a, 'c: 'a, K> Challenge<'a, 'c, K> {
     /// Wait for this specific challenge to get finalized.
     pub async fn finalize(&mut self) -> Result<(), AcmeError>
     where
-        K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+        K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         tracing::debug!("Polling authorization resource to check for status updates");
 

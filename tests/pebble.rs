@@ -120,7 +120,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn http01_failure() {
+async fn failure_http01_challenge() {
     tracing_init();
     pebble_http01_failue().await.unwrap();
     yacme::pebble::Pebble::new().down();

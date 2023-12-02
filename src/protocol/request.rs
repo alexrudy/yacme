@@ -94,19 +94,36 @@ type Token<Payload, State> = jaws::Token<Payload, State, Flat>;
 
 /// The components requrired to sign an ACME request from an account which
 /// is already registered with the ACME service in question.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[doc(hidden)]
 pub struct Identified<K> {
     identifier: AccountKeyIdentifier,
     key: Arc<K>,
 }
 
+impl<K> Clone for Identified<K> {
+    fn clone(&self) -> Self {
+        Self {
+            identifier: self.identifier.clone(),
+            key: self.key.clone(),
+        }
+    }
+}
+
 /// The components required to sign an ACME request for a new account,
 /// when the ACME service is not yet aware of the public key being used.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[doc(hidden)]
 pub struct Signature<K> {
     key: Arc<K>,
+}
+
+impl<K> Clone for Signature<K> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+        }
+    }
 }
 
 /// The signing key and method for an ACME request.
@@ -117,7 +134,7 @@ pub struct Signature<K> {
 /// key, but the JWS will not contain the JWK object for the public key, and
 /// instead will have the `kid` (Key ID) field, which will contain an account
 /// identifier. In ACME, the account identifier is a URL.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Key<K> {
     /// A signing key which will be identified to the ACME service as a
     /// known account.
@@ -128,9 +145,21 @@ pub enum Key<K> {
     Signed(Signature<K>),
 }
 
+impl<K> Clone for Key<K> {
+    fn clone(&self) -> Self {
+        match self {
+            Key::Identified(Identified { identifier, key }) => Key::Identified(Identified {
+                identifier: identifier.clone(),
+                key: key.clone(),
+            }),
+            Key::Signed(Signature { key }) => Key::Signed(Signature { key: key.clone() }),
+        }
+    }
+}
+
 impl<K> Key<K>
 where
-    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+    K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
     /// Create a protected header which can use this [Key] for signing.
     ///
@@ -234,12 +263,26 @@ impl<K> From<(Arc<K>, AccountKeyIdentifier)> for Key<K> {
 /// println!("{}", request.formatted());
 /// ```
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Request<T, K> {
     method: Method<T>,
     url: Url,
     key: Key<K>,
     headers: HeaderMap,
+}
+
+impl<T, K> Clone for Request<T, K>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            method: self.method.clone(),
+            url: self.url.clone(),
+            key: self.key.clone(),
+            headers: self.headers.clone(),
+        }
+    }
 }
 
 impl<T, K> Request<T, K> {
@@ -309,7 +352,7 @@ impl<K> Request<(), K> {
 impl<T, K> Request<T, K>
 where
     T: Serialize,
-    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+    K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
     fn token(&self, nonce: Nonce) -> Token<&T, Unsigned<RequestHeader>> {
         let header = RequestHeader::new(self.url.clone(), Some(nonce));
@@ -413,7 +456,7 @@ pub struct FormatSignedRequest<'r, T, K>(&'r Request<T, K>, Nonce);
 impl<'r, T, K> fmt::JWTFormat for FormatSignedRequest<'r, T, K>
 where
     T: Serialize,
-    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+    K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
     fn fmt<W: std::fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> std::fmt::Result {
         self.0.acme_format_preamble(f)?;
@@ -425,7 +468,7 @@ where
 impl<T, K> fmt::JWTFormat for Request<T, K>
 where
     T: Serialize,
-    K: jaws::algorithms::TokenSigner + jaws::key::SerializeJWK + Clone,
+    K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
     fn fmt<W: fmt::Write>(&self, f: &mut fmt::IndentWriter<'_, W>) -> fmt::Result {
         self.acme_format_preamble(f)?;
@@ -460,7 +503,7 @@ mod test {
     use p256::NistP256;
     use serde_json::json;
 
-    use jaws::{Compact, JWTFormat};
+    use jaws::{Compact, JWTFormat, SignatureBytes};
 
     use super::*;
 
@@ -492,7 +535,9 @@ mod test {
         let mut token = jaws::Token::new(RequestHeader::new(url, Some(nonce)), &(), Compact);
         token.header_mut().key().derived();
 
-        let signed = token.sign::<SigningKey<NistP256>>(&key).unwrap();
+        let signed = token
+            .sign::<SigningKey<NistP256>, SignatureBytes>(&key)
+            .unwrap();
         let header = signed.header();
         assert_eq!(
             header.formatted().to_string(),
@@ -516,7 +561,9 @@ mod test {
         let mut token = jaws::Token::new(RequestHeader::new(url, Some(nonce)), &(), Compact);
         *token.header_mut().key_id() = Some(identifier.to_string());
 
-        let signed = token.sign::<SigningKey<NistP256>>(&key).unwrap();
+        let signed = token
+            .sign::<SigningKey<NistP256>, SignatureBytes>(&key)
+            .unwrap();
         let header = signed.header();
 
         eprintln!("{}", header.formatted());
