@@ -113,7 +113,7 @@ impl ClientBuilder {
 ///
 /// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
 ///
-/// let mut client = Client::default();
+/// let mut client = AcmeClient::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
 ///
 /// let request = Request::get("https://acme.example.com/account/1".parse().unwrap(), key);
