@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(ecdsa::SigningKey::from(read_private_key(PRIVATE_KEY_PATH)?));
+    let key = Arc::new((read_private_key(PRIVATE_KEY_PATH)?));
 
     // Step 1: Get an account
     tracing::info!("Requesting account");

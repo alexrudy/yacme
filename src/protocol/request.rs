@@ -231,7 +231,7 @@ impl<K> From<(Arc<K>, AccountKeyIdentifier)> for Key<K> {
 /// ACME prescribes that all requests are POST JWS requests in the flattened
 /// JSON format. This structure contains all of the materials *except* the
 /// anti-replay [nonce][Nonce] which are required to create an appropriate HTTP
-/// request. The [nonce][Nonce] is left out of this object that if the [`super::Client`]
+/// request. The [nonce][Nonce] is left out of this object so that if the [`super::AcmeClient`]
 /// encounters a bad [nonce][Nonce], it can re-try the same request with a new [nonce][Nonce]
 /// value without having to re-build the request object.
 ///
@@ -372,8 +372,8 @@ where
     /// Sign and finalize this request so that it can be sent over HTTP.
     ///
     /// The resulting [`SignedRequest`] can be converted to a [`reqwest::Request`]
-    /// for transmission. Normally, this method is not necessary - the [`crate::protocol::Client`]
-    /// provides [`crate::protocol::Client::execute`] for executing [`Request`] objects natively.
+    /// for transmission. Normally, this method is not necessary - the [`crate::protocol::AcmeClient`]
+    /// provides [`crate::protocol::AcmeClient::execute`] for executing [`Request`] objects natively.
     pub fn sign(&self, nonce: Nonce) -> Result<SignedRequest, AcmeError> {
         let signed_token = self.signed_token(nonce)?;
         let mut request = reqwest::Request::new(reqwest::Method::POST, self.url.clone().into());

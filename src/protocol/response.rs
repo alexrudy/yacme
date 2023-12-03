@@ -109,7 +109,7 @@ impl<T> Response<T> {
 
     /// Get the [`Nonce`] from this response.
     ///
-    /// Normally, this is unnecessay, as [`super::Client`] will automatically handle
+    /// Normally, this is unnecessay, as [`super::AcmeClient`] will automatically handle
     /// and track [`Nonce`] values.
     pub fn nonce(&self) -> Option<Nonce> {
         super::client::extract_nonce(&self.headers).ok()

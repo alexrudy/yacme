@@ -217,7 +217,7 @@ impl Pebble {
                 && output
                     .stdout
                     .iter()
-                    .map(|&b| (b == '\n' as u8) as u32)
+                    .map(|&b| (b == b'\n') as u32)
                     .sum::<u32>()
                     > 2
             {

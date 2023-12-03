@@ -1,6 +1,6 @@
 fn run_example(name: &str) -> std::process::Output {
     let output = std::process::Command::new("cargo")
-        .args(&["run", "--features=pebble", "--example", name])
+        .args(["run", "--features=pebble", "--example", name])
         .output()
         .unwrap();
 

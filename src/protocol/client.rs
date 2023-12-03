@@ -104,7 +104,7 @@ impl ClientBuilder {
 ///
 /// ```no_run
 /// # use std::sync::Arc;
-/// # use yacme::protocol::Client;
+/// # use yacme::protocol::AcmeClient;
 /// # use yacme::protocol::Request;
 /// # use yacme::protocol::Response;
 /// # use signature::rand_core::OsRng;

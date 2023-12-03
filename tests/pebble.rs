@@ -27,9 +27,7 @@ async fn http01() {
 }
 
 fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
-    Arc::new(ecdsa::SigningKey::from(
-        ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng),
-    ))
+    Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng))
 }
 
 #[tracing::instrument("http01")]
