@@ -16,7 +16,7 @@ use reqwest::Url;
 use serde::Serialize;
 use signature::rand_core::OsRng;
 use yacme::protocol::jose::AccountKeyIdentifier;
-use yacme::protocol::{Client, Request, Response};
+use yacme::protocol::{AcmeClient, Response};
 use yacme::schema::account::{Contacts, CreateAccount};
 use yacme::schema::authorizations::Authorization;
 use yacme::schema::challenges::{Challenge, ChallengeReadyRequest};
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Client maintains synchronous state, and so requires a mutable / exclusive reference.
-    let mut client = Client::builder()
+    let mut client = AcmeClient::builder()
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
         .with_nonce_url(directory.new_nonce.clone())
@@ -97,11 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let account: Response<Account> = client
-        .execute(Request::post(
-            account_request,
-            directory.new_account.clone(),
-            key.clone(),
-        ))
+        .post(directory.new_account.clone(), account_request, key.clone())
         .await?;
 
     tracing::trace!("Account: \n{account:#?}");
@@ -121,11 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let order: Response<Order> = client
-        .execute(Request::post(
-            payload,
-            directory.new_order.clone(),
-            account_key.clone(),
-        ))
+        .post(directory.new_order.clone(), payload, account_key.clone())
         .await?;
 
     let order_url = order.location().expect("New order should have a location");
@@ -133,8 +125,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Completing Authorizations");
     for authz_url in order.payload().authorizations() {
-        let authz = client
-            .execute::<_, _, Authorization>(Request::get(authz_url.clone(), account_key.clone()))
+        let authz: Response<Authorization> = client
+            .get_as_post(authz_url.clone(), account_key.clone())
             .await?;
         tracing::trace!("Authz:\n{authz:#?}");
 
@@ -161,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let chall_setup = Http01ChallengeSetup {
                 token: challenge.token().into(),
-                content: challenge.authorization(key.deref()).deref().to_owned(),
+                content: challenge.authorization(&*key).to_owned(),
             };
 
             tracing::trace!(
@@ -187,11 +179,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let challenge = client
-                .execute::<_, _, Challenge>(Request::post(
-                    ChallengeReadyRequest::default(),
+                .post::<_, _, _, Challenge>(
                     challenge.url(),
+                    ChallengeReadyRequest::default(),
                     account_key.clone(),
-                ))
+                )
                 .await?;
 
             tracing::debug!("Marked challenge ready: {challenge:#?}");
@@ -200,11 +192,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             tracing::debug!("Fetching authorization");
 
-            let authz = client
-                .execute::<_, _, Authorization>(Request::get(
-                    authz_url.clone(),
-                    account_key.clone(),
-                ))
+            let authz: Response<Authorization> = client
+                .get_as_post(authz_url.clone(), account_key.clone())
                 .await?;
             tracing::trace!("Authz:\n{authz:#?}");
 
@@ -231,12 +220,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
     let finalize =
         FinalizeOrder::new::<_, ecdsa::der::Signature<_>>(order.payload(), certificate_key.deref());
-    let mut order = client
-        .execute::<_, _, Order>(Request::post(
-            finalize,
+    let mut order: Response<Order> = client
+        .post(
             order.payload().finalize().clone(),
+            finalize,
             account_key.clone(),
-        ))
+        )
         .await?;
 
     tracing::info!("Finalized order: {:?}", order.status());
@@ -245,18 +234,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while matches!(order.payload().status(), OrderStatus::Processing) {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         order = client
-            .execute(Request::get(order_url.clone(), account_key.clone()))
+            .get_as_post(order_url.clone(), account_key.clone())
             .await?;
         tracing::debug!("Order status: {:?}", order.payload().status());
     }
 
     if let Some(certificate) = order.payload().certificate() {
         tracing::info!("Fetching certificate");
-        let _cert = client
-            .execute::<_, _, CertificateChain>(Request::get(
-                certificate.clone(),
-                account_key.clone(),
-            ))
+        let _cert: Response<CertificateChain> = client
+            .get_as_post(certificate.clone(), account_key.clone())
             .await?;
 
         tracing::info!("Save certificate chain here");

@@ -12,11 +12,11 @@ use crate::protocol::request::Encode;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Client {
-    inner: Arc<Mutex<crate::protocol::Client>>,
+    inner: Arc<Mutex<crate::protocol::AcmeClient>>,
 }
 
 impl Client {
-    pub(crate) fn new(client: crate::protocol::Client) -> Self {
+    pub(crate) fn new(client: crate::protocol::AcmeClient) -> Self {
         Client {
             inner: Arc::new(Mutex::new(client)),
         }

@@ -18,7 +18,7 @@ pub mod jose;
 pub mod request;
 pub mod response;
 
-pub use client::Client;
+pub use client::AcmeClient;
 pub use errors::AcmeError;
 pub use jaws::base64data::Base64JSON;
 pub use jaws::base64data::Base64Signature;
@@ -101,7 +101,7 @@ pub(crate) mod test {
 
     #[macro_export]
     macro_rules! example {
-        ($name:tt) => {
+        ($name:expr) => {
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/tests/fixtures/",
@@ -112,7 +112,7 @@ pub(crate) mod test {
 
     #[macro_export]
     macro_rules! response {
-        ($name:tt) => {
+        ($name:expr) => {
             $crate::protocol::test::parse($crate::example!($name))
         };
     }

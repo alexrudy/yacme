@@ -6,43 +6,14 @@
 //! This example handles the challenge using pebble's challenge server. In the real world,
 //! you would have to implement this yourself.
 
-use std::io::{self, Read};
-use std::ops::Deref;
-use std::path::Path;
 use std::sync::Arc;
 
-use ecdsa::SigningKey;
 use pkcs8::DecodePrivateKey;
-use serde::Serialize;
 use signature::rand_core::OsRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
-use yacme::service::Provider;
-
-fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
-    let mut buf = Vec::new();
-    rdr.read_to_end(&mut buf)?;
-    Ok(buf)
-}
-
-fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
-    let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
-    let mut buf = String::new();
-    rdr.read_to_string(&mut buf)?;
-    Ok(buf)
-}
-
-fn read_private_key<P: AsRef<Path>>(path: P) -> io::Result<SigningKey<p256::NistP256>> {
-    let raw = read_string(path)?;
-
-    let key = ecdsa::SigningKey::from_pkcs8_pem(&raw).unwrap();
-
-    Ok(key)
-}
 
 const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
-
 const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
 
 #[tokio::main]
@@ -50,9 +21,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     tracing::debug!("Loading root certificate from {PEBBLE_ROOT_CA}");
-    let cert = reqwest::Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
+    let cert = reqwest::Certificate::from_pem(&std::fs::read(PEBBLE_ROOT_CA)?)?;
 
-    let provider = Provider::build()
+    let provider = yacme::service::Provider::build()
         .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
@@ -60,7 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
+
+    let key = Arc::new(ecdsa::SigningKey::from_pkcs8_pem(
+        &std::fs::read_to_string(PRIVATE_KEY_PATH)?,
+    )?);
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -118,9 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 // This method is specific to pebble - you would set up your challenge respons in an appropriate fashion
 async fn http01_challenge_response(
     challenge: &Http01Challenge,
-    key: &SigningKey<p256::NistP256>,
+    key: &ecdsa::SigningKey<p256::NistP256>,
 ) -> Result<(), reqwest::Error> {
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, serde::Serialize)]
     struct Http01ChallengeSetup {
         token: String,
         content: String,
@@ -128,7 +102,7 @@ async fn http01_challenge_response(
 
     let chall_setup = Http01ChallengeSetup {
         token: challenge.token().into(),
-        content: challenge.authorization(key).deref().to_owned(),
+        content: (*challenge.authorization(key)).to_owned(),
     };
 
     tracing::trace!(

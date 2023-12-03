@@ -305,9 +305,9 @@ impl<T, K> Request<T, K> {
     /// is required as it is a part of the JWS header (to prevent re-using a
     /// header and signature pair for additional requests). The signing key is
     /// also required.
-    pub fn post<KK>(payload: T, url: Url, key: KK) -> Self
+    pub fn post<L>(payload: T, url: Url, key: L) -> Self
     where
-        KK: Into<Key<K>>,
+        L: Into<Key<K>>,
     {
         Self::new(Method::Post(payload), url, key)
     }
@@ -341,9 +341,9 @@ impl<K> Request<(), K> {
     /// When making an authenticated `GET` request to an ACME server, the client
     /// sends a `POST` request, with a JWS body where the payload is the empty
     /// string. This is signed in the same way that a `POST` request is signed.
-    pub fn get<KK>(url: Url, key: KK) -> Self
+    pub fn get<L>(url: Url, key: L) -> Self
     where
-        KK: Into<Key<K>>,
+        L: Into<Key<K>>,
     {
         Self::new(Method::Get, url, key)
     }

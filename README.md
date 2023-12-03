@@ -24,20 +24,32 @@ Using the high level service interface, you can connect to letsencrypt (or reall
 (check out [`letsencrypt-pebble.rs`](https://github.com/alexrudy/yacme/blob/main/yacme-service/examples/letsencrypt-pebble.rs) for more details on this example, the code below is not meant to compile)
 
 ```rust no_run
+//! Run a certificate issue process via the pebble local ACME server
+//!
+//! *Prerequisite*: Start the pebble server via docker-compose. It is defined in the
+//! pebble/ directory, or available at https://github.com/letsencrypt/pebble/
+//!
+//! This example handles the challenge using pebble's challenge server. In the real world,
+//! you would have to implement this yourself.
 
 use std::sync::Arc;
-use yacme::service::Authorization;
-use yacme::schema::challenges::ChallengeKind;
+
+use pkcs8::DecodePrivateKey;
 use signature::rand_core::OsRng;
+use yacme::schema::authorizations::AuthorizationStatus;
+use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
+
+const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
+const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     tracing::debug!("Loading root certificate from {PEBBLE_ROOT_CA}");
-    let cert = reqwest::Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
+    let cert = reqwest::Certificate::from_pem(&std::fs::read(PEBBLE_ROOT_CA)?)?;
 
-    let provider = Provider::build()
+    let provider = yacme::service::Provider::build()
         .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
@@ -45,7 +57,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
+
+    let key = Arc::new(ecdsa::SigningKey::from_pkcs8_pem(
+        &std::fs::read_to_string(PRIVATE_KEY_PATH)?,
+    )?);
 
     // Step 1: Get an account
     tracing::info!("Requesting account");
@@ -99,6 +114,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+// This method is specific to pebble - you would set up your challenge respons in an appropriate fashion
+async fn http01_challenge_response(
+    challenge: &Http01Challenge,
+    key: &ecdsa::SigningKey<p256::NistP256>,
+) -> Result<(), reqwest::Error> {
+    #[derive(Debug, serde::Serialize)]
+    struct Http01ChallengeSetup {
+        token: String,
+        content: String,
+    }
+
+    let chall_setup = Http01ChallengeSetup {
+        token: challenge.token().into(),
+        content: (*challenge.authorization(key)).to_owned(),
+    };
+
+    tracing::trace!(
+        "Challenge Setup:\n{}",
+        serde_json::to_string(&chall_setup).unwrap()
+    );
+
+    let resp = reqwest::Client::new()
+        .post("http://localhost:8055/add-http01")
+        .json(&chall_setup)
+        .send()
+        .await?;
+    match resp.error_for_status_ref() {
+        Ok(_) => {}
+        Err(_) => {
+            eprintln!("Request:");
+            eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
+            eprintln!("ERROR:");
+            eprintln!("Status: {:?}", resp.status().canonical_reason());
+            eprintln!("{}", resp.text().await?);
+            panic!("Failed to update challenge server");
+        }
+    }
+
+    Ok(())
+}
+
 ```
 
 ## Finding your way around

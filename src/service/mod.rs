@@ -132,7 +132,7 @@ pub struct ProviderBuilder {
 impl ProviderBuilder {
     fn new() -> Self {
         ProviderBuilder {
-            client: crate::protocol::client::Client::builder(),
+            client: crate::protocol::client::AcmeClient::builder(),
             url: None,
             directory: None,
             name: None,
