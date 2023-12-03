@@ -6,7 +6,7 @@ use jaws::JWTFormat;
 use pkcs8::DecodePrivateKey;
 use reqwest::Certificate;
 use reqwest::Url;
-use yacme::protocol::{Client, Request};
+use yacme::protocol::{AcmeClient, Request};
 use yacme::schema::account::{Contacts, CreateAccount};
 use yacme::schema::directory::Directory;
 use yacme::schema::Account;
@@ -63,14 +63,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Client maintains synchronous state, and so requires a mutable / exclusive reference.
-    let mut client = Client::builder()
+    let mut client = AcmeClient::builder()
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
         .with_nonce_url(directory.new_nonce.clone())
         .build()?;
 
     tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
-    let key = Arc::new(ecdsa::SigningKey::from(read_private_key(PRIVATE_KEY_PATH)?));
+    let key = Arc::new(read_private_key(PRIVATE_KEY_PATH)?);
 
     // Step 1: Get an account
     tracing::info!("Requesting account");

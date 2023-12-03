@@ -16,20 +16,18 @@ use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
 
 fn tracing_init() {
-    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    // let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    let _ = tracing_subscriber::fmt::try_init();
 }
 
 #[tokio::test]
 async fn http01() {
     tracing_init();
     pebble_http01().await.unwrap();
-    yacme::pebble::Pebble::new().down();
 }
 
 fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
-    Arc::new(ecdsa::SigningKey::from(
-        ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng),
-    ))
+    Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng))
 }
 
 #[tracing::instrument("http01")]
@@ -60,8 +58,8 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut order = account
         .order()
-        .dns("www.example.test")
-        .dns("internal.example.test")
+        .dns("http01-a.example.test")
+        .dns("http01-b.example.test")
         .create()
         .await?;
     tracing::trace!("Order: \n{order:#?}");
@@ -114,8 +112,6 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("{}", cert.to_pem_documents()?.join(""));
 
-    pebble.down();
-
     Ok(())
 }
 
@@ -123,7 +119,6 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 async fn failure_http01_challenge() {
     tracing_init();
     pebble_http01_failue().await.unwrap();
-    yacme::pebble::Pebble::new().down();
 }
 
 #[tracing::instrument("http01-failure")]
@@ -155,7 +150,7 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
     let order = account
         .order()
         .dns("fail.example.test")
-        .dns("also-fail.example.test")
+        .dns("fail-b.example.test")
         .create()
         .await?;
     tracing::trace!("Order: \n{order:#?}");
@@ -192,8 +187,6 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Authorization finalized");
     }
 
-    pebble.down();
-
     Ok(())
 }
 
@@ -201,7 +194,6 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
 async fn dns01() {
     tracing_init();
     let r = pebble_dns01().await;
-    yacme::pebble::Pebble::new().down();
     r.unwrap();
 }
 
@@ -233,8 +225,8 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut order = account
         .order()
-        .dns("dns.example.test")
-        .dns("other.example.test")
+        .dns("dns01.example.test")
+        .dns("dns01-b.example.test")
         .create()
         .await?;
     tracing::trace!("Order: \n{order:#?}");
@@ -282,8 +274,6 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await??;
     println!("{}", cert.to_pem_documents()?.join(""));
-
-    pebble.down();
 
     Ok(())
 }

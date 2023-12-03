@@ -231,7 +231,7 @@ impl<K> From<(Arc<K>, AccountKeyIdentifier)> for Key<K> {
 /// ACME prescribes that all requests are POST JWS requests in the flattened
 /// JSON format. This structure contains all of the materials *except* the
 /// anti-replay [nonce][Nonce] which are required to create an appropriate HTTP
-/// request. The [nonce][Nonce] is left out of this object that if the [`super::Client`]
+/// request. The [nonce][Nonce] is left out of this object so that if the [`super::AcmeClient`]
 /// encounters a bad [nonce][Nonce], it can re-try the same request with a new [nonce][Nonce]
 /// value without having to re-build the request object.
 ///
@@ -305,9 +305,9 @@ impl<T, K> Request<T, K> {
     /// is required as it is a part of the JWS header (to prevent re-using a
     /// header and signature pair for additional requests). The signing key is
     /// also required.
-    pub fn post<KK>(payload: T, url: Url, key: KK) -> Self
+    pub fn post<L>(payload: T, url: Url, key: L) -> Self
     where
-        KK: Into<Key<K>>,
+        L: Into<Key<K>>,
     {
         Self::new(Method::Post(payload), url, key)
     }
@@ -341,9 +341,9 @@ impl<K> Request<(), K> {
     /// When making an authenticated `GET` request to an ACME server, the client
     /// sends a `POST` request, with a JWS body where the payload is the empty
     /// string. This is signed in the same way that a `POST` request is signed.
-    pub fn get<KK>(url: Url, key: KK) -> Self
+    pub fn get<L>(url: Url, key: L) -> Self
     where
-        KK: Into<Key<K>>,
+        L: Into<Key<K>>,
     {
         Self::new(Method::Get, url, key)
     }
@@ -372,8 +372,8 @@ where
     /// Sign and finalize this request so that it can be sent over HTTP.
     ///
     /// The resulting [`SignedRequest`] can be converted to a [`reqwest::Request`]
-    /// for transmission. Normally, this method is not necessary - the [`crate::protocol::Client`]
-    /// provides [`crate::protocol::Client::execute`] for executing [`Request`] objects natively.
+    /// for transmission. Normally, this method is not necessary - the [`crate::protocol::AcmeClient`]
+    /// provides [`crate::protocol::AcmeClient::execute`] for executing [`Request`] objects natively.
     pub fn sign(&self, nonce: Nonce) -> Result<SignedRequest, AcmeError> {
         let signed_token = self.signed_token(nonce)?;
         let mut request = reqwest::Request::new(reqwest::Method::POST, self.url.clone().into());

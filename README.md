@@ -1,5 +1,10 @@
 # Yet Another Certificate Management Engine
 
+[![crate][crate-image]][crate-link]
+[![Docs][docs-image]][docs-link]
+[![Build Status][build-image]][build-link]
+![MIT licensed][license-image]
+
 YACME is an implementation of the [ACME protocol](https://tools.ietf.org/html/rfc8555).
 
 ## Features
@@ -9,69 +14,144 @@ It does not currently support TLS-ALPN-01 challenges, but may at a future time.
 
 YACME also does not support certificate revocation or account certificate updates.
 
-YACME supports ec256 keys only at this point, but new key implementations would be welcome
-additions to `yacme::key`.
+YACME uses [jaws](https://crates.io/jaws) to provide JWT support, and so supports all of the signing algorithms
+supported by that crate.
 
 ## Getting Started
 
 Using the high level service interface, you can connect to letsencrypt (or really, and ACME provider) and issue a certificate:
 
-(check out [`letsencrypt-pebble.rs`](https://github.com/alexrudy/yacme/blob/main/yacme-service/examples/letsencrypt-pebble.rs) for more details on this example)
+(check out [`letsencrypt-pebble.rs`](https://github.com/alexrudy/yacme/blob/main/yacme-service/examples/letsencrypt-pebble.rs) for more details on this example, the code below is not meant to compile)
 
 ```rust no_run
+//! Run a certificate issue process via the pebble local ACME server
+//!
+//! *Prerequisite*: Start the pebble server via docker-compose. It is defined in the
+//! pebble/ directory, or available at https://github.com/letsencrypt/pebble/
+//!
+//! This example handles the challenge using pebble's challenge server. In the real world,
+//! you would have to implement this yourself.
 
 use std::sync::Arc;
-use yacme::service::Authorization;
-use yacme::schema::challenges::ChallengeKind;
+
+use pkcs8::DecodePrivateKey;
 use signature::rand_core::OsRng;
+use yacme::schema::authorizations::AuthorizationStatus;
+use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
+
+const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
+const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
 
+    tracing::debug!("Loading root certificate from {PEBBLE_ROOT_CA}");
+    let cert = reqwest::Certificate::from_pem(&std::fs::read(PEBBLE_ROOT_CA)?)?;
 
-    let provider = yacme::service::Provider::build().
-        directory_url(
-            yacme::service::provider::LETSENCRYPT.parse().unwrap()
-        )
-            .build()
-            .await?;
+    let provider = yacme::service::Provider::build()
+        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .add_root_certificate(cert)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .await?;
 
-    // Create a random key to identify this account. Currently only ECDSA keys using
-    // the P256 curve are supported.
-    let account_key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
+    tracing::info!("Loading private key from {PRIVATE_KEY_PATH:?}");
 
-    // You should probably save this key somewhere:
-    use pkcs8::{EncodePrivateKey, LineEnding};
-    let data = account_key.to_pkcs8_pem(LineEnding::default()).unwrap();
+    let key = Arc::new(ecdsa::SigningKey::from_pkcs8_pem(
+        &std::fs::read_to_string(PRIVATE_KEY_PATH)?,
+    )?);
 
-    // Fetch an existing account
-    let account = provider.account(account_key).must_exist().get().await?;
+    // Step 1: Get an account
+    tracing::info!("Requesting account");
+    let account = provider
+        .account(key)
+        .add_contact_email("hello@example.test")?
+        .agree_to_terms_of_service()
+        .create()
+        .await?;
 
-    // Create a new order
+    tracing::trace!("Account: \n{account:#?}");
+    tracing::info!("Requesting order");
+
     let mut order = account
         .order()
         .dns("www.example.test")
         .dns("internal.example.test")
         .create()
         .await?;
+    tracing::trace!("Order: \n{order:#?}");
 
-    // Get the authorizations
-    let mut authz: Vec<Authorization<_>> = order.authorizations().await?;
-    let auth = &mut authz[0];
-    let mut chall = auth
-        .challenge(&ChallengeKind::Http01)
-        .ok_or("No http01 challenge provided")?;
-    let inner = chall.http01().unwrap();
-    // Complete the challenges, then call
-    chall.ready().await?;
-    // Wait for the service to acknowleged the challenge
-    auth.finalize().await?;
+    tracing::info!("Completing Authorizations");
 
-    // Set a certifiacte key
-    let cert_key: ::ecdsa::SigningKey<p256::NistP256> = ::ecdsa::SigningKey::random(&mut OsRng);
+    for auth in order.authorizations().await?.iter_mut() {
+        tracing::info!("Authorizing {:?}", auth.identifier());
+        tracing::trace!("Authorization: \n{auth:#?}");
 
-    // Finalize and fetch the order
-    let cert = order.finalize_and_download::<_, ecdsa::der::Signature<p256::NistP256>>(&cert_key).await?;
+        if !matches!(auth.data().status, AuthorizationStatus::Pending) {
+            continue;
+        }
+
+        let mut chall = auth
+            .challenge(&ChallengeKind::Http01)
+            .ok_or("No http01 challenge provided")?;
+        let inner = chall.http01().unwrap();
+        http01_challenge_response(&inner, &account.key()).await?;
+
+        chall.ready().await?;
+        auth.finalize().await?;
+        tracing::info!("Authorization finalized");
+    }
+
+    tracing::info!("Finalizing order");
+    tracing::debug!("Generating random certificate key");
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let cert = order
+        .finalize_and_download::<ecdsa::SigningKey::<p256::NistP256>, ecdsa::der::Signature<p256::NistP256>>(&certificate_key)
+        .await?;
+
+    println!("{}", cert.to_pem_documents()?.join(""));
+
+    Ok(())
+}
+
+// This method is specific to pebble - you would set up your challenge respons in an appropriate fashion
+async fn http01_challenge_response(
+    challenge: &Http01Challenge,
+    key: &ecdsa::SigningKey<p256::NistP256>,
+) -> Result<(), reqwest::Error> {
+    #[derive(Debug, serde::Serialize)]
+    struct Http01ChallengeSetup {
+        token: String,
+        content: String,
+    }
+
+    let chall_setup = Http01ChallengeSetup {
+        token: challenge.token().into(),
+        content: (*challenge.authorization(key)).to_owned(),
+    };
+
+    tracing::trace!(
+        "Challenge Setup:\n{}",
+        serde_json::to_string(&chall_setup).unwrap()
+    );
+
+    let resp = reqwest::Client::new()
+        .post("http://localhost:8055/add-http01")
+        .json(&chall_setup)
+        .send()
+        .await?;
+    match resp.error_for_status_ref() {
+        Ok(_) => {}
+        Err(_) => {
+            eprintln!("Request:");
+            eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
+            eprintln!("ERROR:");
+            eprintln!("Status: {:?}", resp.status().canonical_reason());
+            eprintln!("{}", resp.text().await?);
+            panic!("Failed to update challenge server");
+        }
+    }
 
     Ok(())
 }
@@ -82,10 +162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 YACME is split into several levels of api:
 
-- `service` is the high level API, and provides a simple interface for issuing certificates.
-- `schema` provides all of the data structures to implement individual ACME endpoints.
-- `protocol` provides the JWT protocol used by ACME servers.
-- `cert` provides support for X.509 certificates.
+- [`service`](https://docs.rs/yacme/latest/yacme/service/index.html) is the high level API, and provides a simple interface for issuing certificates.
+- [`schema`](https://docs.rs/yacme/latest/yacme/schema/index.html) provides all of the data structures to implement individual ACME endpoints.
+- [`protocol`](https://docs.rs/yacme/latest/yacme/protocol/index.html) provides the JWT protocol used by ACME servers.
+- [`cert`](https://docs.rs/yacme/latest/yacme/cert/index.html) provides support for X.509 certificates.
 
 ## Goals
 
@@ -99,3 +179,13 @@ The design goals of this project are:
 - Runtime flexible. Signature algorithms can be swapped out without changing types in the code calling in to the ACME service.
 
 This probably isn't good for production use, but it is based on the work of [RustCrypto](https://github.com/RustCrypto) who make good stuff. Don't blame them, blame me!
+
+[//]: # (badges)
+
+[crate-image]: https://buildstats.info/crate/yacme
+[crate-link]: https://crates.io/crates/yacme
+[docs-image]: https://docs.rs/yacme/badge.svg
+[docs-link]: https://docs.rs/yacme/
+[build-image]: https://github.com/alexrudy/yacme/actions/workflows/ci.yml/badge.svg
+[build-link]: https://github.com/alexrudy/yacme/actions/workflows/ci.yml
+[license-image]: https://img.shields.io/badge/license-MIT-blue.svg

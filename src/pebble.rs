@@ -2,13 +2,13 @@
 //!
 
 use std::{
-    io::{self, Read},
+    collections::BTreeMap,
+    io::{Read, Seek, Write},
     net::Ipv4Addr,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
 
-use lazy_static::lazy_static;
+use fd_lock::{RwLock, RwLockWriteGuard};
 use serde::Serialize;
 
 /// Parse an HTTP response formatted like an RFC 8555 example.
@@ -56,26 +56,122 @@ pub fn parse_http_response_example(data: &str) -> http::Response<String> {
     response
 }
 
-/// Read from a file to bytes.
-pub fn read_bytes<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
-    let mut buf = Vec::new();
-    rdr.read_to_end(&mut buf)?;
-    Ok(buf)
-}
-
-/// Read from a file to a string.
-pub fn read_string<P: AsRef<Path>>(path: P) -> io::Result<String> {
-    let mut rdr = io::BufReader::new(std::fs::File::open(path)?);
-    let mut buf = String::new();
-    rdr.read_to_string(&mut buf)?;
-    Ok(buf)
-}
-
 const PEBBLE_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/");
 
-lazy_static! {
-    static ref PEBBLE: Mutex<Arc<Pebble>> = Mutex::new(Arc::new(Pebble::create()));
+#[derive(Debug)]
+struct PidRc {
+    lock: RwLock<std::fs::File>,
+    counts: BTreeMap<u32, usize>,
+}
+
+struct LockedPidRc<'l> {
+    guard: RwLockWriteGuard<'l, std::fs::File>,
+    counts: &'l mut BTreeMap<u32, usize>,
+}
+
+impl PidRc {
+    fn new<P: AsRef<Path>>(path: &P) -> Self {
+        let lock = RwLock::new(
+            std::fs::File::options()
+                .read(true)
+                .append(true)
+                .create(true)
+                .open(path.as_ref())
+                .unwrap(),
+        );
+
+        Self {
+            lock,
+            counts: Default::default(),
+        }
+    }
+
+    fn lock(&mut self) -> LockedPidRc<'_> {
+        let guard = self.lock.write().unwrap();
+        LockedPidRc {
+            guard,
+            counts: &mut self.counts,
+        }
+    }
+}
+
+impl<'l> LockedPidRc<'l> {
+    fn write(&mut self) {
+        self.guard.set_len(0).expect("truncate lock file");
+
+        for (pid, c) in self.counts.iter() {
+            if *c > 0 {
+                for _ in 0..*c {
+                    writeln!(self.guard, "{}", pid).unwrap();
+                }
+            }
+        }
+    }
+
+    fn read(&mut self) {
+        self.guard.rewind().expect("rewind to start of lockfile");
+        let mut buf = String::new();
+        let _ = self.guard.read_to_string(&mut buf);
+
+        self.counts.clear();
+        for pid in buf.lines() {
+            let count = self.counts.entry(pid.parse().unwrap()).or_insert(0);
+            *count += 1;
+        }
+    }
+
+    fn increment(&mut self) {
+        self.read();
+
+        let pid = std::process::id();
+        let count = self.counts.entry(pid).or_insert(0);
+        *count += 1;
+
+        tracing::debug!(%pid, "increment: {}", count);
+
+        self.write();
+    }
+
+    fn decrement(&mut self) -> bool {
+        self.read();
+
+        let pid = std::process::id();
+        match self.counts.entry(pid) {
+            std::collections::btree_map::Entry::Vacant(_) => {
+                panic!("pid not found in lock file when decrementing");
+            }
+            std::collections::btree_map::Entry::Occupied(mut value) => {
+                assert_ne!(value.get(), &0, "pid count is 0 when decrementing");
+                tracing::debug!(%pid, "decrement: {}", value.get());
+
+                let new_value = value.get().saturating_sub(1);
+                if new_value > 0 {
+                    value.insert(new_value);
+                } else {
+                    value.remove();
+                }
+            }
+        }
+
+        self.write();
+        !self.counts.is_empty()
+    }
+
+    fn clear(&mut self) {
+        self.counts.clear();
+        self.write();
+    }
+
+    fn reset(&mut self) {
+        self.counts.clear();
+        self.counts.insert(std::process::id(), 1);
+        self.write();
+    }
+
+    fn is_empty(&mut self) -> bool {
+        self.read();
+        self.counts.is_empty()
+    }
 }
 
 /// RAII wrapper around a pebble service.
@@ -84,6 +180,7 @@ lazy_static! {
 #[derive(Debug)]
 pub struct Pebble {
     directory: PathBuf,
+    lock: PidRc,
 }
 
 impl Pebble {
@@ -94,22 +191,42 @@ impl Pebble {
     /// This effectively acts as a signleton, in that only one pebble
     /// docker container will be started at any given time, but creating
     /// multiple `Pebble` instances will all refer to the same container.
-    pub fn new() -> Arc<Self> {
-        let pebble = PEBBLE.lock().unwrap();
-        if Arc::strong_count(&pebble) == 1 {
-            pebble.start();
-        }
-        pebble.clone()
+    pub fn new() -> Self {
+        let directory: PathBuf = PEBBLE_DIRECTORY.into();
+        let lock = PidRc::new(&directory.join("lock"));
+        let mut pebble = Self { directory, lock };
+
+        pebble.start();
+
+        pebble
     }
 
-    fn create() -> Self {
-        let pebble_directory = std::fs::canonicalize(PEBBLE_DIRECTORY).expect("valid pebble path");
-        Pebble {
-            directory: pebble_directory,
-        }
-    }
+    fn start(&mut self) {
+        let mut guard = self.lock.lock();
 
-    fn start(&self) {
+        if !guard.is_empty() {
+            let output = std::process::Command::new("docker")
+                .arg("compose")
+                .args(["ps"])
+                .current_dir(&self.directory)
+                .output()
+                .expect("able to spawn docker compose command");
+
+            // must get more than 2 lines of output.
+            if output.status.success()
+                && output
+                    .stdout
+                    .iter()
+                    .map(|&b| (b == b'\n') as u32)
+                    .sum::<u32>()
+                    > 2
+            {
+                tracing::debug!("Pebble server already running");
+                guard.increment();
+                return;
+            }
+        }
+
         tracing::debug!("Starting pebble server");
 
         let output = std::process::Command::new("docker")
@@ -126,10 +243,12 @@ impl Pebble {
             .expect("able to spawn docker compose command");
 
         if !output.status.success() {
-            // let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-
+            guard.clear(); // nothing is running, so clear the lock file
             panic!("Failed to start a pebble server: {stderr}");
+        } else {
+            tracing::debug!("Pebble server started");
+            guard.reset();
         }
     }
 
@@ -165,10 +284,12 @@ impl Pebble {
     pub fn certificate(&self) -> reqwest::Certificate {
         let cert = self.directory.join("pebble.minica.pem");
 
-        reqwest::Certificate::from_pem(&read_bytes(cert).unwrap()).expect("valid pebble root CA")
+        reqwest::Certificate::from_pem(&std::fs::read(cert).expect("read pebble root CA"))
+            .expect("valid pebble root CA")
     }
 
     /// Set a DNS A record for a given host on the pebble challenge responder.
+    #[tracing::instrument(skip(self, addresses))]
     pub async fn dns_a(&self, host: &str, addresses: &[Ipv4Addr]) {
         #[derive(Debug, Serialize)]
         struct PebbleDNSRecord {
@@ -180,6 +301,11 @@ impl Pebble {
             host: host.to_owned(),
             addresses: addresses.iter().map(|ip| ip.to_string()).collect(),
         };
+
+        tracing::trace!(
+            "Challenge Setup:\n{}",
+            serde_json::to_string(&chall_setup).unwrap()
+        );
 
         let resp = reqwest::Client::new()
             .post("http://localhost:8055/add-a")
@@ -204,6 +330,7 @@ impl Pebble {
     }
 
     /// Set a DNS01 TXT record for a given host on the pebble challenge responder.
+    #[tracing::instrument(skip(self, value))]
     pub async fn dns01(&self, host: &str, value: &str) {
         #[derive(Debug, Serialize)]
         struct Dns01TXT {
@@ -244,6 +371,7 @@ impl Pebble {
     }
 
     /// Configure the pebble challenge responder to serve a HTTP01 challenge.
+    #[tracing::instrument(skip_all)]
     pub async fn http01(&self, token: &str, content: &str) {
         #[derive(Debug, Serialize)]
         struct Http01ChallengeSetup {
@@ -283,18 +411,13 @@ impl Pebble {
         }
     }
 
-    /// Stop the pebble docker container.
-    ///
-    /// This only takes effect if this is the last `Pebble` instance.
-    pub fn down(self: &Arc<Self>) {
-        let pebble = PEBBLE.lock().unwrap();
-        if Arc::strong_count(self) == 2 {
-            self.down_internal();
-        }
-        drop(pebble)
-    }
+    fn down_internal(&mut self) {
+        let mut guard = self.lock.lock();
 
-    fn down_internal(&self) {
+        if guard.decrement() {
+            return;
+        }
+
         tracing::debug!("Stopping pebble server");
         let output = std::process::Command::new("docker")
             .arg("compose")
@@ -306,5 +429,14 @@ impl Pebble {
         if !output.status.success() {
             panic!("Failed to stop a pebble server");
         }
+        tracing::debug!("Pebble server stopped");
+
+        guard.clear();
+    }
+}
+
+impl Drop for Pebble {
+    fn drop(&mut self) {
+        self.down_internal();
     }
 }

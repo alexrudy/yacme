@@ -6,9 +6,12 @@ use serde::Serialize;
 
 use super::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use super::jose::Nonce;
+use super::request::Key;
 use super::response::{Decode, Response};
 use super::Request;
 use super::Url;
+
+pub use AcmeClient as Client;
 
 #[cfg(feature = "trace-requests")]
 use jaws::fmt::JWTFormat;
@@ -76,8 +79,8 @@ impl ClientBuilder {
     }
 
     /// Finalize this and build this client. See [`reqwest::ClientBuilder::build`].
-    pub fn build(self) -> Result<Client, reqwest::Error> {
-        Ok(Client {
+    pub fn build(self) -> Result<AcmeClient, reqwest::Error> {
+        Ok(AcmeClient {
             inner: self.inner.build()?,
             nonce: None,
             new_nonce: self.new_nonce,
@@ -101,7 +104,7 @@ impl ClientBuilder {
 ///
 /// ```no_run
 /// # use std::sync::Arc;
-/// # use yacme::protocol::Client;
+/// # use yacme::protocol::AcmeClient;
 /// # use yacme::protocol::Request;
 /// # use yacme::protocol::Response;
 /// # use signature::rand_core::OsRng;
@@ -110,7 +113,7 @@ impl ClientBuilder {
 ///
 /// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
 ///
-/// let mut client = Client::default();
+/// let mut client = AcmeClient::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());
 ///
 /// let request = Request::get("https://acme.example.com/account/1".parse().unwrap(), key);
@@ -121,13 +124,13 @@ impl ClientBuilder {
 /// # }
 /// ```
 #[derive(Debug, Default)]
-pub struct Client {
+pub struct AcmeClient {
     pub(super) inner: reqwest::Client,
     nonce: Option<Nonce>,
     new_nonce: Option<Url>,
 }
 
-impl Client {
+impl AcmeClient {
     /// Create a new client builder to configure a client.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
@@ -139,7 +142,7 @@ impl Client {
     }
 }
 
-impl Client {
+impl AcmeClient {
     /// Run a plain HTTP `GET` request without using the ACME HTTP JWS
     /// protocol.
     pub async fn get<R>(&mut self, url: Url) -> Result<Response<R>, AcmeError>
@@ -148,6 +151,66 @@ impl Client {
     {
         let response = self.inner.get(url.as_str()).send().await?;
         Response::from_decoded_response(response).await
+    }
+
+    /// Submit a post request to the ACME provider, using the ACME HTTP JWS
+    #[cfg(all(feature = "trace-requests", not(docs)))]
+    pub async fn post<P, K, L, R>(
+        &mut self,
+        url: Url,
+        payload: P,
+        key: K,
+    ) -> Result<Response<R>, AcmeError>
+    where
+        P: Serialize,
+        R: Decode + Encode,
+        K: Into<Key<L>>,
+        L: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
+    {
+        let request = Request::post(payload, url, key);
+        self.execute(request).await
+    }
+
+    /// Submit a post-as-get request to the ACME provider, using the ACME HTTP JWS
+    #[cfg(all(feature = "trace-requests", not(docs)))]
+    pub async fn get_as_post<K, L, R>(&mut self, url: Url, key: K) -> Result<Response<R>, AcmeError>
+    where
+        R: Decode + Encode,
+        K: Into<Key<L>>,
+        L: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
+    {
+        let request = Request::get(url, key);
+        self.execute(request).await
+    }
+
+    /// Submit a post request to the ACME provider, using the ACME HTTP JWS
+    #[cfg(any(not(feature = "trace-requests"), docs))]
+    pub async fn post<P, K, L, R>(
+        &mut self,
+        url: Url,
+        payload: P,
+        key: K,
+    ) -> Result<Response<R>, AcmeError>
+    where
+        P: Serialize,
+        R: Decode,
+        K: Into<Key<L>>,
+        L: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
+    {
+        let request = Request::post(payload, url, key);
+        self.execute(request).await
+    }
+
+    /// Submit a post-as-get request to the ACME provider, using the ACME HTTP JWS
+    #[cfg(any(not(feature = "trace-requests"), docs))]
+    pub async fn get_as_post<K, L, R>(&mut self, url: Url, key: K) -> Result<Response<R>, AcmeError>
+    where
+        R: Decode,
+        K: Into<Key<L>>,
+        L: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
+    {
+        let request = Request::get(url, key);
+        self.execute(request).await
     }
 
     /// Execute an HTTP request using the ACME protocol.
@@ -236,7 +299,7 @@ pub(crate) fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {
     ))
 }
 
-impl Client {
+impl AcmeClient {
     fn record_nonce(&mut self, headers: &HeaderMap) -> Result<(), AcmeError> {
         self.nonce = Some(extract_nonce(headers)?);
         Ok(())

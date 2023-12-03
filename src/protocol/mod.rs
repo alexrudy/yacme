@@ -3,7 +3,7 @@
 //! Most ACME requests are authenticated as a JWT, signed by the
 //! account key. This module provides the implementation of that
 //! protocol, and the deserialization of the corresponding responses,
-//! as well as providing a [`Client`] type which can be used to
+//! as well as providing a [`AcmeClient`] type which can be used to
 //! track the correct Nonce through a series of requests.
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
@@ -18,7 +18,7 @@ pub mod jose;
 pub mod request;
 pub mod response;
 
-pub use client::Client;
+pub use client::AcmeClient;
 pub use errors::AcmeError;
 pub use jaws::base64data::Base64JSON;
 pub use jaws::base64data::Base64Signature;
@@ -101,7 +101,7 @@ pub(crate) mod test {
 
     #[macro_export]
     macro_rules! example {
-        ($name:tt) => {
+        ($name:expr) => {
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/tests/fixtures/",
@@ -112,7 +112,7 @@ pub(crate) mod test {
 
     #[macro_export]
     macro_rules! response {
-        ($name:tt) => {
+        ($name:expr) => {
             $crate::protocol::test::parse($crate::example!($name))
         };
     }
