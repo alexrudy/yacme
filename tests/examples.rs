@@ -12,11 +12,12 @@ fn run_example(name: &str) -> std::process::Output {
     output
 }
 
-#[test]
-fn letsencrypt_pebble() {
+#[tokio::test]
+async fn letsencrypt_pebble() {
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
 
-    let _pebble_guard = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::new();
+    pebble.ready().await.unwrap();
     run_example("pebble");
 }
 
