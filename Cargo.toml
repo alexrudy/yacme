@@ -20,7 +20,7 @@ chrono = { version = "0.4", features = ["serde"] }
 const-oid = { version = "0.9", features = ["db"] }
 der = { version = "0.7", features = ["std", "pem", "oid"] }
 fd-lock = { version = "4", optional = true }
-http = { version = "0.2", optional = true }
+http = { version = "1.0", optional = true }
 lazy_static = { version = "1", optional = true }
 mime = "0.3"
 pem-rfc7468 = { version = "0.7", features = ["std"] }
@@ -47,7 +47,7 @@ static_assertions = "1"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber.version = "0.3"
 pkcs8 = { version = "0.10", features = ["alloc", "pem"] }
-http = { version = "0.2" }
+http = { version = "1.0" }
 p256 = { version = "0.13", features = ["pkcs8", "arithmetic", "jwk"] }
 ecdsa = { version = "0.16", features = ["pem"] }
 rsa = { version = "0.9", features = ["sha2"] }
