@@ -34,7 +34,7 @@ tracing = { version = "0.1" }
 x509-cert = { version = "0.2", features = ["pem", "std"] }
 
 [dependencies.jaws]
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 features = ["ecdsa", "p256", "rsa", "hmac"]
 
 [dependencies.reqwest]
