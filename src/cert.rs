@@ -2,7 +2,6 @@
 
 use std::fmt;
 
-use signature::SignatureEncoding;
 use x509_cert::der::{
     asn1::{Ia5StringRef, SetOfVec},
     Encode, FixedTag,
@@ -231,8 +230,10 @@ impl<'a> From<&'a [u8]> for SignedCertificateRequest {
     }
 }
 
-impl SignatureEncoding for SignedCertificateRequest {
-    type Repr = Box<[u8]>;
+impl AsRef<[u8]> for SignedCertificateRequest {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 #[cfg(test)]
@@ -254,8 +255,7 @@ mod test {
                 &key,
             );
 
-        let csr =
-            x509_cert::request::CertReq::from_der(signed.to_bytes().as_ref()).expect("valid CSR");
+        let csr = x509_cert::request::CertReq::from_der(signed.as_ref()).expect("valid CSR");
 
         let doc = csr.signature.as_bytes().unwrap();
         let _ = der::Document::from_der(doc).expect("valid DER");
