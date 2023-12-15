@@ -20,6 +20,7 @@ pub mod response;
 
 pub use client::AcmeClient;
 pub use errors::AcmeError;
+pub use jaws::base64data::Base64Data;
 pub use jaws::base64data::Base64JSON;
 pub use jaws::base64data::Base64Signature;
 

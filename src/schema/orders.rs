@@ -5,7 +5,7 @@
 //! using the authorizations and challenges.
 
 use crate::cert::SignedCertificateRequest;
-use crate::protocol::Base64Signature;
+use crate::protocol::Base64Data;
 use chrono::{DateTime, Utc};
 use der::Decode;
 use der::EncodePem;
@@ -133,7 +133,7 @@ pub struct NewOrderRequest {
 /// The request sent to finalize an order, including the certificate signing request.
 #[derive(Debug, Clone, Serialize)]
 pub struct FinalizeOrder {
-    csr: Base64Signature<SignedCertificateRequest>,
+    csr: Base64Data<SignedCertificateRequest>,
 }
 
 impl FinalizeOrder {
