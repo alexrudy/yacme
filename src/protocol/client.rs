@@ -249,9 +249,8 @@ impl AcmeClient {
         tracing::trace!("REQ: \n{}", request.as_signed().formatted());
         Response::from_decoded_response(self.execute_internal(request).await?)
             .await
-            .map(|r| {
+            .inspect(|r| {
                 tracing::trace!("RES: \n{}", r.formatted());
-                r
             })
     }
 
