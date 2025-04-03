@@ -10,6 +10,7 @@ pub mod service;
 pub mod pebble;
 
 #[cfg(test)]
+#[allow(missing_docs)]
 pub(crate) mod test {
     use std::sync::Arc;
 

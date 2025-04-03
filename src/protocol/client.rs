@@ -154,7 +154,7 @@ impl AcmeClient {
     }
 
     /// Submit a post request to the ACME provider, using the ACME HTTP JWS
-    #[cfg(all(feature = "trace-requests", not(docs)))]
+    #[cfg(all(feature = "trace-requests", not(doc)))]
     pub async fn post<P, K, L, R>(
         &mut self,
         url: Url,
@@ -172,7 +172,7 @@ impl AcmeClient {
     }
 
     /// Submit a post-as-get request to the ACME provider, using the ACME HTTP JWS
-    #[cfg(all(feature = "trace-requests", not(docs)))]
+    #[cfg(all(feature = "trace-requests", not(doc)))]
     pub async fn get_as_post<K, L, R>(&mut self, url: Url, key: K) -> Result<Response<R>, AcmeError>
     where
         R: Decode + Encode,
@@ -184,7 +184,7 @@ impl AcmeClient {
     }
 
     /// Submit a post request to the ACME provider, using the ACME HTTP JWS
-    #[cfg(any(not(feature = "trace-requests"), docs))]
+    #[cfg(any(not(feature = "trace-requests"), doc))]
     pub async fn post<P, K, L, R>(
         &mut self,
         url: Url,
@@ -202,7 +202,7 @@ impl AcmeClient {
     }
 
     /// Submit a post-as-get request to the ACME provider, using the ACME HTTP JWS
-    #[cfg(any(not(feature = "trace-requests"), docs))]
+    #[cfg(any(not(feature = "trace-requests"), doc))]
     pub async fn get_as_post<K, L, R>(&mut self, url: Url, key: K) -> Result<Response<R>, AcmeError>
     where
         R: Decode,
@@ -219,7 +219,7 @@ impl AcmeClient {
     ///
     /// Request payloads must be serializable, and request responses must implement [`Decode`].
     /// `Decode` is implemented for all types that implement [`serde::Deserialize`].
-    #[cfg(any(not(feature = "trace-requests"), docs))]
+    #[cfg(any(not(feature = "trace-requests"), doc))]
     pub async fn execute<P, K, R>(
         &mut self,
         request: Request<P, K>,
@@ -236,7 +236,7 @@ impl AcmeClient {
     ///
     /// Tracing is done using the [RFC 8885](https://tools.ietf.org/html/rfc8885) format,
     /// via the `tracing` crate, at the `trace` level.
-    #[cfg(all(feature = "trace-requests", not(docs)))]
+    #[cfg(all(feature = "trace-requests", not(doc)))]
     pub async fn execute<P, K, R>(
         &mut self,
         request: Request<P, K>,
