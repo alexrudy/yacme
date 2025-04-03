@@ -76,7 +76,7 @@ impl<W> TitleCaseWriter<W> {
 /// as the word separator.
 pub struct TitleCase<'a, T: ?Sized>(&'a T);
 
-impl<'a, T: fmt::Display + ?Sized> fmt::Display for TitleCase<'a, T> {
+impl<T: fmt::Display + ?Sized> fmt::Display for TitleCase<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result {
         let mut writer = TitleCaseWriter::new(f);
         write!(&mut writer, "{}", self.0)
@@ -111,7 +111,7 @@ impl<W> LowerCaseWriter<W> {
 /// also consistent with HTTP/2 and HTTP/3.
 pub struct LowerCase<'a, T: ?Sized>(&'a T);
 
-impl<'a, T: fmt::Display + ?Sized> fmt::Display for LowerCase<'a, T> {
+impl<T: fmt::Display + ?Sized> fmt::Display for LowerCase<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result {
         let mut writer = LowerCaseWriter::new(f);
         write!(&mut writer, "{}", self.0)

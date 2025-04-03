@@ -453,7 +453,7 @@ impl<T, K> Request<T, K> {
 /// [RFC 8885](https://datatracker.ietf.org/doc/html/rfc8555)
 pub struct FormatSignedRequest<'r, T, K>(&'r Request<T, K>, Nonce);
 
-impl<'r, T, K> fmt::JWTFormat for FormatSignedRequest<'r, T, K>
+impl<T, K> fmt::JWTFormat for FormatSignedRequest<'_, T, K>
 where
     T: Serialize,
     K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,

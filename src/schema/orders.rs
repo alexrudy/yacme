@@ -154,7 +154,7 @@ impl FinalizeOrder {
         }
         let signed_csr = csr.sign(key);
 
-        #[cfg(all(feature = "trace-requests", not(docs)))]
+        #[cfg(all(feature = "trace-requests", not(doc)))]
         {
             let doc = signed_csr.to_pem();
             tracing::trace!("CSR: \n{}", doc);
@@ -224,13 +224,12 @@ impl crate::protocol::response::Decode for CertificateChain {
                 Ok(data)
             })
             .collect::<Result<Vec<_>, pem_rfc7468::Error>>()
-            .map_err(|err| {
+            .inspect_err(|&err| {
                 tracing::error!(
                     "Error {} decoding certificate chain {}",
                     err,
                     documents_text
                 );
-                err
             })?;
 
         Ok(CertificateChain {
@@ -238,13 +237,12 @@ impl crate::protocol::response::Decode for CertificateChain {
                 .iter()
                 .map(|doc| x509_cert::Certificate::from_der(doc))
                 .collect::<Result<Vec<_>, der::Error>>()
-                .map_err(|err| {
+                .inspect_err(|&err| {
                     tracing::error!(
                         "Error {} decoding certificate chain as DER: {}",
                         err,
                         documents_text
                     );
-                    err
                 })?,
         })
     }

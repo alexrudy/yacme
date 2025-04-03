@@ -95,7 +95,7 @@ impl PidRc {
     }
 }
 
-impl<'l> LockedPidRc<'l> {
+impl LockedPidRc<'_> {
     fn write(&mut self) {
         self.guard.set_len(0).expect("truncate lock file");
 
@@ -185,7 +185,6 @@ pub struct Pebble {
 
 impl Pebble {
     #[allow(clippy::new_without_default)]
-
     /// Create a new pebble manager instance.
     ///
     /// This effectively acts as a signleton, in that only one pebble
