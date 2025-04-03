@@ -98,6 +98,7 @@ impl FromStr for Url {
 }
 
 #[cfg(test)]
+#[allow(missing_docs)]
 pub(crate) mod test {
 
     #[macro_export]

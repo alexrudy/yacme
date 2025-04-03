@@ -1,4 +1,8 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(
+    not(doc),
+    doc = "YACME is an implementation of the [ACME protocol](https://tools.ietf.org/html/rfc8555)."
+)]
+#![cfg_attr(feature = "pebble", doc = include_str!("../README.md"))]
 #![deny(missing_docs)]
 
 pub mod cert;

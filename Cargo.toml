@@ -93,3 +93,6 @@ publish = false
 pre-release-hook = ["git", "switch", "-c", "release-{{version}}"]
 push = true
 tag = false
+
+[package.metadata.docs.rs]
+all-features = true
