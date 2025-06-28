@@ -1,6 +1,9 @@
 //! Directory provides all of the URLs required to configure an ACME client for use with a specific
 //! provider. It can be fetched as JSON from an advertised directory URL.
 
+#[cfg(feature = "acme-profiles")]
+use std::collections::BTreeMap;
+
 use crate::protocol::Url;
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +49,11 @@ pub struct Metadata {
     #[serde(default)]
     pub website: Option<Url>,
 
+    #[cfg(feature = "acme-profiles")]
+    /// Supported acme profiels and their associated documentation links
+    #[serde(default)]
+    pub profiles: Option<BTreeMap<String, Url>>,
+
     /// The hostnames that the ACME server recognizes as referring to itself for the purposes of
     /// CAA record validation as defined in [RFC6844](https://www.rfc-editor.org/rfc/rfc6844).
     /// Each string represents the same sequence of ASCII code points that the server
@@ -75,9 +83,14 @@ mod tests {
             directory.new_account,
             "https://example.com/acme/new-account".parse().unwrap()
         );
+
+        let metadata = directory.meta.unwrap();
         assert_eq!(
-            directory.meta.unwrap().website,
+            metadata.website,
             Some("https://www.example.com/".parse().unwrap())
-        )
+        );
+
+        #[cfg(feature = "acme-profiles")]
+        assert!(metadata.profiles.unwrap().contains_key("tls-server"));
     }
 }

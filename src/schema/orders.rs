@@ -39,6 +39,8 @@ pub struct Order {
     status: OrderStatus,
     expires: Option<DateTime<Utc>>,
     identifiers: Vec<Identifier>,
+    #[cfg(feature = "acme-profiles")]
+    profile: Option<String>,
     not_before: Option<DateTime<Utc>>,
     not_after: Option<DateTime<Utc>>,
     error: Option<AcmeErrorDocument>,
@@ -62,6 +64,12 @@ impl Order {
     /// The identifiers which apply to this order.
     pub fn identifiers(&self) -> &[Identifier] {
         self.identifiers.as_ref()
+    }
+
+    #[cfg(feature = "acme-profiles")]
+    /// Name of the selected certificate profile in use.
+    pub fn profile(&self) -> Option<&str> {
+        self.profile.as_deref()
     }
 
     /// The configured start time for the certificate.
@@ -122,6 +130,10 @@ pub enum OrderStatus {
 pub struct NewOrderRequest {
     /// A list of identifiers to include in the order.
     pub identifiers: Vec<Identifier>,
+
+    #[cfg(feature = "acme-profiles")]
+    /// Name of the certificate profile to use.
+    pub profile: Option<String>,
 
     /// Sets a time before which the issued certificate will not be valid.
     pub not_before: Option<DateTime<Utc>>,

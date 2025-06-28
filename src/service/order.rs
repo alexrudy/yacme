@@ -242,6 +242,8 @@ impl<'a, K> Order<'a, K> {
 pub struct OrderBuilder<'a, K> {
     account: &'a Account<K>,
     identifiers: Vec<Identifier>,
+    #[cfg(feature = "acme-profiles")]
+    profile: Option<String>,
     not_before: Option<DateTime<Utc>>,
     not_after: Option<DateTime<Utc>>,
 }
@@ -251,6 +253,8 @@ impl<'a, K> OrderBuilder<'a, K> {
         Self {
             account,
             identifiers: Vec::new(),
+            #[cfg(feature = "acme-profiles")]
+            profile: None,
             not_before: None,
             not_after: None,
         }
@@ -269,6 +273,15 @@ impl<'a, K> OrderBuilder<'a, K> {
     /// Currently, YACME only supports DNS identifiers.
     pub fn dns<S: Into<String>>(mut self, identifier: S) -> Self {
         self.identifiers.push(Identifier::dns(identifier.into()));
+        self
+    }
+
+    #[cfg(feature = "acme-profiles")]
+    /// Set the certificate profile to request
+    ///
+    /// Certificate profiles can be found in the provider directory
+    pub fn profile<S: Into<String>>(mut self, profile: S) -> Self {
+        self.profile = Some(profile.into());
         self
     }
 
@@ -296,6 +309,8 @@ impl<'a, K> OrderBuilder<'a, K> {
         let account = self.account;
         let payload = NewOrderRequest {
             identifiers: self.identifiers,
+            #[cfg(feature = "acme-profiles")]
+            profile: self.profile,
             not_before: self.not_before,
             not_after: self.not_after,
         };
