@@ -65,7 +65,7 @@ impl<K> Account<K> {
     /// Create an update request for an account.
     ///
     /// Update requests are built using the [`UpdateAccount`] builder.
-    pub fn update(&mut self) -> UpdateAccount<K> {
+    pub fn update(&mut self) -> UpdateAccount<'_, K> {
         UpdateAccount::new(self)
     }
 
@@ -90,12 +90,12 @@ impl<K> Account<K> {
     }
 
     /// Create a new order for a certificate
-    pub fn order(&self) -> OrderBuilder<K> {
+    pub fn order(&self) -> OrderBuilder<'_, K> {
         OrderBuilder::new(self)
     }
 
     /// Get a list of orders associated with this account
-    pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order<K>>, AcmeError>
+    pub async fn orders(&self, limit: Option<usize>) -> Result<Vec<Order<'_, K>>, AcmeError>
     where
         K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {

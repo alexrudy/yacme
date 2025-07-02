@@ -102,7 +102,7 @@ impl LockedPidRc<'_> {
         for (pid, c) in self.counts.iter() {
             if *c > 0 {
                 for _ in 0..*c {
-                    writeln!(self.guard, "{}", pid).unwrap();
+                    writeln!(self.guard, "{pid}").unwrap();
                 }
             }
         }
