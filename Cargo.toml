@@ -53,8 +53,10 @@ ecdsa = { version = "0.16", features = ["pem"] }
 rsa = { version = "0.9", features = ["sha2"] }
 
 [features]
+default = ["acme-profiles"]
 pebble = ["lazy_static", "http", "fd-lock"]
 trace-requests = []
+acme-profiles = []
 
 [[example]]
 name = "pebble"

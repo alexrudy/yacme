@@ -12,6 +12,10 @@ Content-Type: application/json
     "termsOfService": "https://example.com/acme/terms/2017-5-30",
     "website": "https://www.example.com/",
     "caaIdentities": ["example.com"],
-    "externalAccountRequired": false
+    "externalAccountRequired": false,
+    "profiles": {
+        "tls-server": "https://example.com/acme/profiles/tls-server",
+        "email": "https://example.com/acme/profiles/email"
+    }
   }
 }
