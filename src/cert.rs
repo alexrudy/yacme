@@ -23,7 +23,7 @@ pub enum RequestedSubjectName {
 impl fmt::Display for RequestedSubjectName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            RequestedSubjectName::Dns(dns) => write!(f, "DNS:{}", dns),
+            RequestedSubjectName::Dns(dns) => write!(f, "DNS:{dns}"),
         }
     }
 }

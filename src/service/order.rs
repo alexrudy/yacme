@@ -81,7 +81,7 @@ impl<'a, K> Order<'a, K> {
     }
 
     /// Fetch the authorizations for this order.
-    pub async fn authorizations(&self) -> Result<Vec<Authorization<K>>, AcmeError>
+    pub async fn authorizations(&self) -> Result<Vec<Authorization<'_, K>>, AcmeError>
     where
         K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
@@ -106,7 +106,7 @@ impl<'a, K> Order<'a, K> {
     pub async fn authorization(
         &self,
         id: &Identifier,
-    ) -> Result<Option<Authorization<K>>, AcmeError>
+    ) -> Result<Option<Authorization<'_, K>>, AcmeError>
     where
         K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
@@ -332,7 +332,7 @@ impl<'a, K> OrderBuilder<'a, K> {
 pub(crate) async fn list<K>(
     account: &Account<K>,
     limit: Option<usize>,
-) -> Result<Vec<Order<K>>, AcmeError>
+) -> Result<Vec<Order<'_, K>>, AcmeError>
 where
     K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
 {
