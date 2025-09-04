@@ -177,6 +177,12 @@ impl KeyAuthorization {
                 .expect("invalid key for thumbprint");
         KeyAuthorization(format!("{token}.{thumb}"))
     }
+
+    /// The base64-encoded SHA-256 digest of the authorization token.
+    pub fn b64digest(&self) -> String {
+        let digest = sha2::Sha256::digest(self.as_bytes());
+        base64ct::Base64UrlUnpadded::encode_string(&digest)
+    }
 }
 
 impl Deref for KeyAuthorization {
@@ -277,8 +283,7 @@ impl Dns01Challenge {
     where
         K: jaws::key::SerializePublicJWK,
     {
-        let digest = sha2::Sha256::digest(self.authorization(account_key).as_bytes());
-        base64ct::Base64UrlUnpadded::encode_string(&digest)
+        self.authorization(account_key).b64digest()
     }
 
     /// The key authorization object for this challenge.
