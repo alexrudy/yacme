@@ -96,6 +96,10 @@ pub enum AcmeError {
     #[error("No Nonce header was returned with the request")]
     MissingNonce,
 
+    /// The client tried to get a valid nonce, but got an invalid one too many times in a row.
+    #[error("Exhausted {0} retries trying to get a valid nonce.")]
+    NonceRetriesExhausted(usize),
+
     /// The `reqwest` library encountered an error while making an additional HTTP
     /// request to get a new nonce, and the ACME provider did not provide a corresponding error document.
     #[error("An error occured during a network request to fetch a new nonce: {0}")]
