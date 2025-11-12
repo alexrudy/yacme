@@ -4,6 +4,8 @@ use reqwest::header::HeaderMap;
 use reqwest::Certificate;
 use serde::Serialize;
 
+use crate::protocol::errors::AcmeHTTPError;
+
 use super::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use super::jose::Nonce;
 use super::request::Key;
@@ -270,22 +272,55 @@ impl AcmeClient {
             self.record_nonce(response.headers())?;
             if response.status().is_success() {
                 return Ok(response);
-            } else {
-                let body = response.bytes().await?;
-                let error: AcmeErrorDocument =
-                    serde_json::from_slice(&body).map_err(AcmeError::de)?;
+            }
 
-                if matches!(error.kind(), AcmeErrorCode::BadNonce) {
+            match process_error_response(response).await {
+                AcmeError::Acme(document) if matches!(document.kind(), AcmeErrorCode::BadNonce) => {
                     tracing::trace!("Retrying request with next nonce");
                     nonce = self.get_nonce().await?;
-                } else {
-                    let text = String::from_utf8_lossy(&body);
-                    tracing::trace!(%error, "RES: \n{}", text);
+                }
+                error => {
                     return Err(error.into());
                 }
             }
         }
     }
+}
+
+async fn process_error_response(response: reqwest::Response) -> AcmeError {
+    debug_assert!(
+        !response.status().is_success(),
+        "expected to process an error result"
+    );
+    let status = response.status();
+    let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(error) => {
+            return AcmeError::HttpRequest(error);
+        }
+    };
+
+    if body.is_empty() {
+        return AcmeHTTPError::new(status, None).into();
+    }
+
+    let document: AcmeErrorDocument = match serde_json::from_slice(&body) {
+        Ok(error) => error,
+        Err(error) if status.is_client_error() => {
+            tracing::error!(%status, "Failed to parse error document {}: {}", error, String::from_utf8_lossy(&body));
+            return AcmeHTTPError::new(status, Some(body)).into();
+        }
+        Err(_) => {
+            let text = String::from_utf8_lossy(&body);
+            tracing::trace!(%status, "RES: \n{}", text);
+            return AcmeHTTPError::new(status, Some(body)).into();
+        }
+    };
+
+    let text = String::from_utf8_lossy(&body);
+    tracing::trace!(%document, "RES: \n{}", text);
+
+    AcmeError::Acme(document)
 }
 
 pub(crate) fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {
