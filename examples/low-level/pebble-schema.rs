@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let chall_setup = Http01ChallengeSetup {
                 token: challenge.token().into(),
-                content: challenge.authorization(&*key).to_owned(),
+                content: challenge.authorization(&*key).to_string(),
             };
 
             tracing::trace!(

@@ -164,7 +164,7 @@ impl From<&Challenge> for ChallengeKind {
 
 /// The challenge authorization token, which combines the provided token
 /// with the thumbprint of the account signing key.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct KeyAuthorization(String);
 
 impl KeyAuthorization {
@@ -189,6 +189,12 @@ impl Deref for KeyAuthorization {
     type Target = str;
     fn deref(&self) -> &Self::Target {
         self.0.deref()
+    }
+}
+
+impl From<String> for KeyAuthorization {
+    fn from(value: String) -> Self {
+        KeyAuthorization(value)
     }
 }
 
