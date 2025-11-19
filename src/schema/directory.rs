@@ -50,9 +50,9 @@ pub struct Metadata {
     pub website: Option<Url>,
 
     #[cfg(feature = "acme-profiles")]
-    /// Supported acme profiels and their associated documentation links
+    /// Supported acme profiels and their associated descriptions
     #[serde(default)]
-    pub profiles: Option<BTreeMap<String, Url>>,
+    pub profiles: Option<BTreeMap<String, serde_json::Value>>,
 
     /// The hostnames that the ACME server recognizes as referring to itself for the purposes of
     /// CAA record validation as defined in [RFC6844](https://www.rfc-editor.org/rfc/rfc6844).
