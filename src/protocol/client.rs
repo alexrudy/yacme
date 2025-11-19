@@ -2,7 +2,7 @@
 
 use reqwest::header::HeaderMap;
 use reqwest::Certificate;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::protocol::errors::AcmeHTTPError;
 
@@ -28,6 +28,7 @@ const NONCE_HEADER: &str = "Replay-Nonce";
 pub struct ClientBuilder {
     inner: reqwest::ClientBuilder,
     new_nonce: Option<Url>,
+    configuration: AcmeClientConfiguration,
 }
 
 impl Default for ClientBuilder {
@@ -44,6 +45,7 @@ impl ClientBuilder {
         ClientBuilder {
             inner: builder,
             new_nonce: None,
+            configuration: Default::default(),
         }
     }
 
@@ -80,13 +82,33 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the number of retries to use when a bad nonce is encountered.
+    pub fn bad_nonce_retries(mut self, retries: usize) -> Self {
+        self.configuration.nonce_retries = retries;
+        self
+    }
+
     /// Finalize this and build this client. See [`reqwest::ClientBuilder::build`].
     pub fn build(self) -> Result<AcmeClient, reqwest::Error> {
         Ok(AcmeClient {
             inner: self.inner.build()?,
             nonce: None,
             new_nonce: self.new_nonce,
+            configuration: self.configuration,
         })
+    }
+}
+
+/// Client configuration specific to ACME
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcmeClientConfiguration {
+    /// How many times to retry when a bad nonce is encountered.
+    pub nonce_retries: usize,
+}
+
+impl Default for AcmeClientConfiguration {
+    fn default() -> Self {
+        Self { nonce_retries: 3 }
     }
 }
 
@@ -130,6 +152,7 @@ pub struct AcmeClient {
     pub(super) inner: reqwest::Client,
     nonce: Option<Nonce>,
     new_nonce: Option<Url>,
+    configuration: AcmeClientConfiguration,
 }
 
 impl AcmeClient {
@@ -266,7 +289,7 @@ impl AcmeClient {
         K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let mut nonce = self.get_nonce().await?;
-        loop {
+        for retry in 0..self.configuration.nonce_retries {
             let signed = request.sign(nonce)?;
             let response = self.inner.execute(signed.into_inner()).await?;
             self.record_nonce(response.headers())?;
@@ -276,7 +299,7 @@ impl AcmeClient {
 
             match process_error_response(response).await {
                 AcmeError::Acme(document) if matches!(document.kind(), AcmeErrorCode::BadNonce) => {
-                    tracing::trace!("Retrying request with next nonce");
+                    tracing::trace!(%retry, "Retrying request with next nonce");
                     nonce = self.get_nonce().await?;
                 }
                 error => {
@@ -284,6 +307,11 @@ impl AcmeClient {
                 }
             }
         }
+
+        tracing::trace!("Nonce retries exhausted");
+        Err(AcmeError::NonceRetriesExhausted(
+            self.configuration.nonce_retries,
+        ))
     }
 }
 
