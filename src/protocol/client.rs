@@ -2,7 +2,9 @@
 
 use reqwest::header::HeaderMap;
 use reqwest::Certificate;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+use crate::protocol::errors::AcmeHTTPError;
 
 use super::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use super::jose::Nonce;
@@ -26,6 +28,7 @@ const NONCE_HEADER: &str = "Replay-Nonce";
 pub struct ClientBuilder {
     inner: reqwest::ClientBuilder,
     new_nonce: Option<Url>,
+    configuration: AcmeClientConfiguration,
 }
 
 impl Default for ClientBuilder {
@@ -42,6 +45,7 @@ impl ClientBuilder {
         ClientBuilder {
             inner: builder,
             new_nonce: None,
+            configuration: Default::default(),
         }
     }
 
@@ -78,13 +82,33 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the number of retries to use when a bad nonce is encountered.
+    pub fn bad_nonce_retries(mut self, retries: usize) -> Self {
+        self.configuration.nonce_retries = retries;
+        self
+    }
+
     /// Finalize this and build this client. See [`reqwest::ClientBuilder::build`].
     pub fn build(self) -> Result<AcmeClient, reqwest::Error> {
         Ok(AcmeClient {
             inner: self.inner.build()?,
             nonce: None,
             new_nonce: self.new_nonce,
+            configuration: self.configuration,
         })
+    }
+}
+
+/// Client configuration specific to ACME
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcmeClientConfiguration {
+    /// How many times to retry when a bad nonce is encountered.
+    pub nonce_retries: usize,
+}
+
+impl Default for AcmeClientConfiguration {
+    fn default() -> Self {
+        Self { nonce_retries: 3 }
     }
 }
 
@@ -128,6 +152,7 @@ pub struct AcmeClient {
     pub(super) inner: reqwest::Client,
     nonce: Option<Nonce>,
     new_nonce: Option<Url>,
+    configuration: AcmeClientConfiguration,
 }
 
 impl AcmeClient {
@@ -264,28 +289,66 @@ impl AcmeClient {
         K: jaws::algorithms::TokenSigner<jaws::SignatureBytes>,
     {
         let mut nonce = self.get_nonce().await?;
-        loop {
+        for retry in 0..self.configuration.nonce_retries {
             let signed = request.sign(nonce)?;
             let response = self.inner.execute(signed.into_inner()).await?;
             self.record_nonce(response.headers())?;
             if response.status().is_success() {
                 return Ok(response);
-            } else {
-                let body = response.bytes().await?;
-                let error: AcmeErrorDocument =
-                    serde_json::from_slice(&body).map_err(AcmeError::de)?;
+            }
 
-                if matches!(error.kind(), AcmeErrorCode::BadNonce) {
-                    tracing::trace!("Retrying request with next nonce");
+            match process_error_response(response).await {
+                AcmeError::Acme(document) if matches!(document.kind(), AcmeErrorCode::BadNonce) => {
+                    tracing::trace!(%retry, "Retrying request with next nonce");
                     nonce = self.get_nonce().await?;
-                } else {
-                    let text = String::from_utf8_lossy(&body);
-                    tracing::trace!(%error, "RES: \n{}", text);
-                    return Err(error.into());
+                }
+                error => {
+                    return Err(error);
                 }
             }
         }
+
+        tracing::trace!("Nonce retries exhausted");
+        Err(AcmeError::NonceRetriesExhausted(
+            self.configuration.nonce_retries,
+        ))
     }
+}
+
+async fn process_error_response(response: reqwest::Response) -> AcmeError {
+    debug_assert!(
+        !response.status().is_success(),
+        "expected to process an error result"
+    );
+    let status = response.status();
+    let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(error) => {
+            return AcmeError::HttpRequest(error);
+        }
+    };
+
+    if body.is_empty() {
+        return AcmeHTTPError::new(status, None).into();
+    }
+
+    let document: AcmeErrorDocument = match serde_json::from_slice(&body) {
+        Ok(error) => error,
+        Err(error) if status.is_client_error() => {
+            tracing::error!(%status, "Failed to parse error document {}: {}", error, String::from_utf8_lossy(&body));
+            return AcmeHTTPError::new(status, Some(body)).into();
+        }
+        Err(_) => {
+            let text = String::from_utf8_lossy(&body);
+            tracing::trace!(%status, "RES: \n{}", text);
+            return AcmeHTTPError::new(status, Some(body)).into();
+        }
+    };
+
+    let text = String::from_utf8_lossy(&body);
+    tracing::trace!(%document, "RES: \n{}", text);
+
+    AcmeError::Acme(document)
 }
 
 pub(crate) fn extract_nonce(headers: &HeaderMap) -> Result<Nonce, AcmeError> {

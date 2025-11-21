@@ -315,14 +315,7 @@ impl Pebble {
         match resp.error_for_status_ref() {
             Ok(_) => {}
             Err(_) => {
-                eprintln!("Request:");
-                eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
-                eprintln!("ERROR:");
-                eprintln!("Status: {:?}", resp.status().canonical_reason());
-                eprintln!(
-                    "{}",
-                    resp.text().await.expect("get response body from pebble")
-                );
+                eprint_response_error(&chall_setup, resp).await;
                 panic!("Failed to update challenge server");
             }
         }
@@ -356,14 +349,7 @@ impl Pebble {
         match resp.error_for_status_ref() {
             Ok(_) => {}
             Err(_) => {
-                eprintln!("Request:");
-                eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
-                eprintln!("ERROR:");
-                eprintln!("Status: {:?}", resp.status().canonical_reason());
-                eprintln!(
-                    "{}",
-                    resp.text().await.expect("get response body from pebble")
-                );
+                eprint_response_error(&chall_setup, resp).await;
                 panic!("Failed to update challenge server");
             }
         }
@@ -397,14 +383,7 @@ impl Pebble {
         match resp.error_for_status_ref() {
             Ok(_) => {}
             Err(_) => {
-                eprintln!("Request:");
-                eprintln!("{}", serde_json::to_string(&chall_setup).unwrap());
-                eprintln!("ERROR:");
-                eprintln!("Status: {:?}", resp.status().canonical_reason());
-                eprintln!(
-                    "{}",
-                    resp.text().await.expect("get response body from pebble")
-                );
+                eprint_response_error(&chall_setup, resp).await;
                 panic!("Failed to update challenge server");
             }
         }
@@ -438,4 +417,18 @@ impl Drop for Pebble {
     fn drop(&mut self) {
         self.down_internal();
     }
+}
+
+async fn eprint_response_error<R: Serialize>(request: &R, response: reqwest::Response) {
+    eprintln!("Request:");
+    eprintln!("{}", serde_json::to_string(&request).unwrap());
+    eprintln!("ERROR:");
+    eprintln!("Status: {}", response.status());
+    eprintln!(
+        "{}",
+        response
+            .text()
+            .await
+            .expect("get response body from pebble")
+    );
 }

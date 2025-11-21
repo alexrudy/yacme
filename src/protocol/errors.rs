@@ -1,12 +1,57 @@
 //! Errors which occur when working with an ACME Protocol
 
+use core::fmt;
+
+use bytes::Bytes;
 use reqwest::header::HeaderValue;
 use thiserror::Error;
 
 pub use self::acme::{AcmeErrorCode, AcmeErrorDocument};
 
+/// An HTTP error response was returned, but it wasn't an Acme Error document
+#[derive(Debug, Clone)]
+pub struct AcmeHTTPError {
+    status: reqwest::StatusCode,
+    body: Option<Bytes>,
+}
+
+impl AcmeHTTPError {
+    /// Create a new HTTP error
+    pub(crate) fn new(status: reqwest::StatusCode, body: Option<Bytes>) -> Self {
+        Self { status, body }
+    }
+
+    /// Body of the HTTP response
+    pub fn body(&self) -> Option<Bytes> {
+        self.body.clone()
+    }
+
+    /// Returned HTTP status code
+    pub fn status(&self) -> reqwest::StatusCode {
+        self.status
+    }
+}
+
+impl fmt::Display for AcmeHTTPError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(body) = self.body.as_ref() {
+            write!(
+                f,
+                "The provider returned a {} response: {}",
+                self.status,
+                String::from_utf8_lossy(body)
+            )
+        } else {
+            write!(f, "The provider returned a {} response", self.status)
+        }
+    }
+}
+
+impl core::error::Error for AcmeHTTPError {}
+
 /// Unified error type for errors arising from the ACME protocol.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AcmeError {
     /// The ACME provider returned an error, see [`AcmeErrorDocument`].
     #[error("An error occured with the ACME service: {0}")]
@@ -16,6 +61,11 @@ pub enum AcmeError {
     /// request, and the ACME provider did not provide a corresponding error document.
     #[error("An error occured during the network request: {0}")]
     HttpRequest(#[from] reqwest::Error),
+
+    /// The provider returned a non-200 HTTP response, but it was not in the form of
+    /// an ACME error document.
+    #[error("The provider returned a {0} response")]
+    HttpStatus(#[from] AcmeHTTPError),
 
     /// An error was encountered while trying to deserialize the JSON payload of the response.
     #[error("An error occured deserializing JSON: {0}")]
@@ -45,6 +95,10 @@ pub enum AcmeError {
     /// adherence to [RFC 8885](https://tools.ietf.org/html/rfc8555).
     #[error("No Nonce header was returned with the request")]
     MissingNonce,
+
+    /// The client tried to get a valid nonce, but got an invalid one too many times in a row.
+    #[error("Exhausted {0} retries trying to get a valid nonce.")]
+    NonceRetriesExhausted(usize),
 
     /// The `reqwest` library encountered an error while making an additional HTTP
     /// request to get a new nonce, and the ACME provider did not provide a corresponding error document.
