@@ -182,7 +182,7 @@ This probably isn't good for production use, but it is based on the work of [Rus
 
 [//]: # (badges)
 
-[crate-image]: https://buildstats.info/crate/yacme
+[crate-image]: https://img.shields.io/crates/v/yacme
 [crate-link]: https://crates.io/crates/yacme
 [docs-image]: https://docs.rs/yacme/badge.svg
 [docs-link]: https://docs.rs/yacme/
