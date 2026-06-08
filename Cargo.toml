@@ -47,7 +47,7 @@ default-features = false
 static_assertions = "1"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber.version = "0.3"
-pkcs8 = { version = "0.10", features = ["alloc", "pem"] }
+pkcs8 = { version = "0.11", features = ["alloc", "pem"] }
 http = { version = "1.1" }
 p256 = { version = "0.13", features = ["pkcs8", "arithmetic", "jwk"] }
 ecdsa = { version = "0.16", features = ["pem"] }
