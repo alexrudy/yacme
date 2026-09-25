@@ -8,8 +8,8 @@
 
 use std::sync::Arc;
 
+use p256::elliptic_curve::Generate;
 use pkcs8::DecodePrivateKey;
-use signature::rand_core::OsRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
 
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate());
     let cert = order
         .finalize_and_download::<ecdsa::SigningKey::<p256::NistP256>, ecdsa::der::Signature<p256::NistP256>>(&certificate_key)
         .await?;

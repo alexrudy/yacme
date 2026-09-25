@@ -10,7 +10,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
-use signature::rand_core::OsRng;
+use p256::elliptic_curve::Generate;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
@@ -27,7 +29,7 @@ async fn http01() {
 }
 
 fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
-    Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng))
+    Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate())
 }
 
 #[tracing::instrument("http01")]
@@ -100,7 +102,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate());
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
         order.finalize_and_download::<ecdsa::SigningKey<p256::NistP256>, ecdsa::der::Signature<_>>(
@@ -267,7 +269,8 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(rsa::pkcs1v15::SigningKey::random(&mut OsRng, 2048).unwrap());
+    let certificate_key =
+        Arc::new(rsa::pkcs1v15::SigningKey::random(&mut UnwrapErr(SysRng), 2048).unwrap());
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
         order.finalize_and_download::<rsa::pkcs1v15::SigningKey<sha2::Sha256>, rsa::pkcs1v15::Signature>(&certificate_key),

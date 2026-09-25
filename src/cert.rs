@@ -7,7 +7,7 @@ use x509_cert::der::{
     Encode, FixedTag,
 };
 use x509_cert::ext::pkix;
-use x509_cert::ext::AsExtension;
+use x509_cert::ext::ToExtension;
 use x509_cert::spki::SignatureBitStringEncoding;
 const PEM_TAG_CSR: &str = "CERTIFICATE REQUEST";
 
@@ -239,13 +239,13 @@ impl AsRef<[u8]> for SignedCertificateRequest {
 #[cfg(test)]
 mod test {
     use der::Decode;
-    use signature::rand_core::OsRng;
+    use p256::elliptic_curve::Generate;
 
     use super::*;
 
     #[test]
     fn csr_signature_is_der() {
-        let key: ecdsa::SigningKey<p256::NistP256> = ecdsa::SigningKey::random(&mut OsRng);
+        let key: ecdsa::SigningKey<p256::NistP256> = ecdsa::SigningKey::generate();
 
         let mut csr = CertificateSigningRequest::new();
         csr.push("example.com");

@@ -11,10 +11,10 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use p256::elliptic_curve::Generate;
 use pkcs8::DecodePrivateKey;
 use reqwest::Url;
 use serde::Serialize;
-use signature::rand_core::OsRng;
 use yacme::protocol::jose::AccountKeyIdentifier;
 use yacme::protocol::{AcmeClient, Response};
 use yacme::schema::account::{Contacts, CreateAccount};
@@ -217,7 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate());
     let finalize =
         FinalizeOrder::new::<_, ecdsa::der::Signature<_>>(order.payload(), certificate_key.deref());
     let mut order: Response<Order> = client
