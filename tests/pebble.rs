@@ -13,9 +13,12 @@ use std::time::Duration;
 use p256::elliptic_curve::Generate;
 use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
+use tokio::time::timeout;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
+
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 fn tracing_init() {
     // let _ = tracing_subscriber::fmt().with_test_writer().try_init();
@@ -25,7 +28,7 @@ fn tracing_init() {
 #[tokio::test]
 async fn http01() {
     tracing_init();
-    pebble_http01().await.unwrap();
+    timeout(TIMEOUT, pebble_http01()).await.unwrap().unwrap();
 }
 
 fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
@@ -120,7 +123,10 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn failure_http01_challenge() {
     tracing_init();
-    pebble_http01_failue().await.unwrap();
+    timeout(TIMEOUT, pebble_http01_failue())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tracing::instrument("http01-failure")]
@@ -195,8 +201,7 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn dns01() {
     tracing_init();
-    let r = pebble_dns01().await;
-    r.unwrap();
+    timeout(TIMEOUT, pebble_dns01()).await.unwrap().unwrap();
 }
 
 #[tracing::instrument("dns01")]
