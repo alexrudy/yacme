@@ -60,7 +60,7 @@ jobs:
             docker compose version
       - name: Start Pebble
         run: |
-            cd pebble/ && docker compose up --detatch --remove-orphans --renew-anon-volumes --wait
+            cd pebble/ && docker compose up --detach --remove-orphans --renew-anon-volumes --wait
             cd pebble/ && docker compose ps
 
 
