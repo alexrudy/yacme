@@ -261,7 +261,7 @@ impl Pebble {
             .unwrap();
 
         loop {
-            match client.get("https://localhost:14000/dir").send().await {
+            match client.get("https://127.0.0.1:14000/dir").send().await {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         break;
@@ -309,7 +309,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-a")
+            .post("http://127.0.0.1:8055/add-a")
             .json(&chall_setup)
             .send()
             .await
@@ -343,7 +343,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/set-txt")
+            .post("http://127.0.0.1:8055/set-txt")
             .json(&chall_setup)
             .send()
             .await
@@ -377,7 +377,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-http01")
+            .post("http://127.0.0.1:8055/add-http01")
             .json(&chall_setup)
             .send()
             .await
