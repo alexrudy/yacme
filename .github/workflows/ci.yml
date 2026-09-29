@@ -35,6 +35,8 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      RUST_LOG: trace
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -45,7 +47,7 @@ jobs:
           toolchain: stable
 
       - name: Run cargo test
-        run: cargo test --all-features
+        run: cargo test --all-features -- --no-capture
 
   pebble:
     name: Pebble
@@ -60,8 +62,10 @@ jobs:
             docker compose version
       - name: Start Pebble
         run: |
-            cd pebble/ && docker compose up --detach --remove-orphans --renew-anon-volumes --wait
-            cd pebble/ && docker compose ps
+            cd pebble/
+            docker compose up --detach --remove-orphans --renew-anon-volumes --wait
+            docker compose ps
+            docker compose down
 
 
   lints:
