@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -47,13 +47,30 @@ jobs:
       - name: Run cargo test
         run: cargo test --all-features
 
+  pebble:
+    name: Pebble
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Show docker versions
+        run: |
+            docker version
+            docker compose version
+      - name: Start Pebble
+        run: |
+            cd pebble/ && docker compose up --detatch --remove-orphans --renew-anon-volumes --wait
+            cd pebble/ && docker compose ps
+
+
   lints:
     name: Lints
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -76,7 +93,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
