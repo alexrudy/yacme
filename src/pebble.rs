@@ -274,6 +274,7 @@ impl Pebble {
                 }
                 Err(error) => {
                     tracing::trace!("Error connecting to pebble: {}", error);
+                    eprintln!("{:?}", error);
                 }
             };
         }
