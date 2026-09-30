@@ -37,11 +37,11 @@ fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
 
 #[tracing::instrument("http01")]
 async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
@@ -131,11 +131,11 @@ async fn failure_http01_challenge() {
 
 #[tracing::instrument("http01-failure")]
 async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
@@ -206,11 +206,11 @@ async fn dns01() {
 
 #[tracing::instrument("dns01")]
 async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
