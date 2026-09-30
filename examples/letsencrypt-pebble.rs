@@ -8,13 +8,24 @@
 
 use std::sync::Arc;
 
+use p256::elliptic_curve::Generate;
 use pkcs8::DecodePrivateKey;
-use signature::rand_core::OsRng;
+use yacme::protocol::Url;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
 
 const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
 const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
+
+fn pebble_directory() -> Url {
+    if let Ok(hostname) = std::env::var("PEBBLE_HOSTNAME") {
+        format!("https://{hostname}/dir")
+            .parse()
+            .expect("invalid URL from PEBBLE_HOSTNAME")
+    } else {
+        yacme::service::provider::PEBBLE.parse().unwrap()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cert = reqwest::Certificate::from_pem(&std::fs::read(PEBBLE_ROOT_CA)?)?;
 
     let provider = yacme::service::Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(pebble_directory())
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -79,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate());
     let cert = order
         .finalize_and_download::<ecdsa::SigningKey::<p256::NistP256>, ecdsa::der::Signature<p256::NistP256>>(&certificate_key)
         .await?;

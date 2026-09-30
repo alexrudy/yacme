@@ -180,6 +180,10 @@ impl LockedPidRc<'_> {
 #[derive(Debug)]
 pub struct Pebble {
     directory: PathBuf,
+
+    /// Hostname for the ACME server
+    pub hostname: String,
+    challenge_server: String,
     lock: PidRc,
 }
 
@@ -190,14 +194,29 @@ impl Pebble {
     /// This effectively acts as a signleton, in that only one pebble
     /// docker container will be started at any given time, but creating
     /// multiple `Pebble` instances will all refer to the same container.
-    pub fn new() -> Self {
+    pub fn new(hostname: impl Into<String>, challenge_server: impl Into<String>) -> Self {
         let directory: PathBuf = PEBBLE_DIRECTORY.into();
         let lock = PidRc::new(&directory.join("lock"));
-        let mut pebble = Self { directory, lock };
+        let mut pebble = Self {
+            directory,
+            hostname: hostname.into(),
+            challenge_server: challenge_server.into(),
+            lock,
+        };
 
         pebble.start();
 
         pebble
+    }
+
+    /// Create a new `Pebble` instance with the default challenge server and hostname.
+    pub fn automatic() -> Self {
+        if std::env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true") {
+            let challenge_server = "challtestsrv:8055";
+            let hostname = "pebble:14000";
+            return Self::new(hostname, challenge_server);
+        }
+        return Self::new("localhost:14000", "localhost:8055");
     }
 
     fn start(&mut self) {
@@ -243,6 +262,8 @@ impl Pebble {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            eprint!("{stdout}");
             guard.clear(); // nothing is running, so clear the lock file
             panic!("Failed to start a pebble server: {stderr}");
         } else {
@@ -259,7 +280,11 @@ impl Pebble {
             .unwrap();
 
         loop {
-            match client.get("https://localhost:14000/dir").send().await {
+            match client
+                .get(format!("https://{}/dir", self.hostname))
+                .send()
+                .await
+            {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         break;
@@ -272,10 +297,11 @@ impl Pebble {
                 }
                 Err(error) => {
                     tracing::trace!("Error connecting to pebble: {}", error);
+                    eprintln!("{:?}", error);
                 }
             };
         }
-
+        tracing::trace!("Pebble is ready");
         Ok(())
     }
 
@@ -307,7 +333,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-a")
+            .post(format!("http://{}/add-a", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await
@@ -341,7 +367,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/set-txt")
+            .post(format!("http://{}/set-txt", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await
@@ -375,7 +401,7 @@ impl Pebble {
         );
 
         let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-http01")
+            .post(format!("http://{}/add-http01", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await

@@ -131,11 +131,11 @@ impl Default for AcmeClientConfiguration {
 /// # use yacme::protocol::AcmeClient;
 /// # use yacme::protocol::Request;
 /// # use yacme::protocol::Response;
-/// # use signature::rand_core::OsRng;
+/// # use p256::elliptic_curve::Generate;
 /// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
+/// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::generate());
 ///
 /// let mut client = AcmeClient::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());

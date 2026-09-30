@@ -499,8 +499,8 @@ impl From<SignedRequest> for reqwest::Request {
 
 #[cfg(test)]
 mod test {
-    use ecdsa::SigningKey;
-    use p256::NistP256;
+    use jaws::crypto::ecdsa::SigningKey;
+    use jaws::crypto::p256::NistP256;
     use serde_json::json;
 
     use jaws::{Compact, JWTFormat, SignatureBytes};
@@ -562,7 +562,7 @@ mod test {
         *token.header_mut().key_id() = Some(identifier.to_string());
 
         let signed = token
-            .sign::<SigningKey<NistP256>, SignatureBytes>(&key)
+            .sign::<SigningKey<NistP256>, SignatureBytes>(&*key)
             .unwrap();
         let header = signed.header();
 

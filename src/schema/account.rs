@@ -19,10 +19,11 @@ pub mod external {
     use jaws::token::Signed;
     use jaws::SignatureBytes;
 
+    use jaws::crypto::sha2;
+    use jaws::crypto::signature::SignatureEncoding;
     use jaws::Flat;
     use jaws::Token;
     use serde::{Deserialize, Serialize};
-    use signature::SignatureEncoding;
 
     use crate::protocol::jose::RequestHeader;
     use crate::protocol::Base64Signature;

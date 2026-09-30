@@ -7,10 +7,10 @@ use std::ops::Deref;
 
 use base64ct::Encoding as _;
 use chrono::{DateTime, Utc};
+use jaws::crypto::sha2::{Digest, Sha256};
 use jaws::key::JsonWebKey;
 use serde::ser::SerializeMap;
 use serde::{ser, Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::protocol::errors::AcmeErrorDocument;
 use crate::protocol::Url;
@@ -180,7 +180,7 @@ impl KeyAuthorization {
 
     /// The base64-encoded SHA-256 digest of the authorization token.
     pub fn b64digest(&self) -> String {
-        let digest = sha2::Sha256::digest(self.as_bytes());
+        let digest = Sha256::digest(self.as_bytes());
         base64ct::Base64UrlUnpadded::encode_string(&digest)
     }
 }

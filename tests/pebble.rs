@@ -10,10 +10,15 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
-use signature::rand_core::OsRng;
+use p256::elliptic_curve::Generate;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
+use tokio::time::timeout;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{Challenge, ChallengeKind};
 use yacme::service::Provider;
+
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 fn tracing_init() {
     // let _ = tracing_subscriber::fmt().with_test_writer().try_init();
@@ -23,20 +28,20 @@ fn tracing_init() {
 #[tokio::test]
 async fn http01() {
     tracing_init();
-    pebble_http01().await.unwrap();
+    timeout(TIMEOUT, pebble_http01()).await.unwrap().unwrap();
 }
 
 fn random_key() -> Arc<ecdsa::SigningKey<p256::NistP256>> {
-    Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng))
+    Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate())
 }
 
 #[tracing::instrument("http01")]
 async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
@@ -100,7 +105,7 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::random(&mut OsRng));
+    let certificate_key = Arc::new(ecdsa::SigningKey::<p256::NistP256>::generate());
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
         order.finalize_and_download::<ecdsa::SigningKey<p256::NistP256>, ecdsa::der::Signature<_>>(
@@ -118,16 +123,19 @@ async fn pebble_http01() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn failure_http01_challenge() {
     tracing_init();
-    pebble_http01_failue().await.unwrap();
+    timeout(TIMEOUT, pebble_http01_failue())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tracing::instrument("http01-failure")]
 async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
@@ -193,17 +201,16 @@ async fn pebble_http01_failue() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn dns01() {
     tracing_init();
-    let r = pebble_dns01().await;
-    r.unwrap();
+    timeout(TIMEOUT, pebble_dns01()).await.unwrap().unwrap();
 }
 
 #[tracing::instrument("dns01")]
 async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
-    let pebble = yacme::pebble::Pebble::new();
+    let pebble = yacme::pebble::Pebble::automatic();
     tokio::time::timeout(Duration::from_secs(3), pebble.ready()).await??;
 
     let provider = Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(format!("https://{}/dir", pebble.hostname).parse().unwrap())
         .add_root_certificate(pebble.certificate())
         .timeout(Duration::from_secs(30))
         .build()
@@ -267,7 +274,8 @@ async fn pebble_dns01() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Finalizing order");
     tracing::debug!("Generating random certificate key");
-    let certificate_key = Arc::new(rsa::pkcs1v15::SigningKey::random(&mut OsRng, 2048).unwrap());
+    let certificate_key =
+        Arc::new(rsa::pkcs1v15::SigningKey::random(&mut UnwrapErr(SysRng), 2048).unwrap());
     let cert = tokio::time::timeout(
         Duration::from_secs(60),
         order.finalize_and_download::<rsa::pkcs1v15::SigningKey<sha2::Sha256>, rsa::pkcs1v15::Signature>(&certificate_key),
