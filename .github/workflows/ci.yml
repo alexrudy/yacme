@@ -49,6 +49,22 @@ jobs:
       - name: Run cargo test
         run: cargo test --all-features -- --no-capture
 
+    services:
+      pebble:
+        image: ghcr.io/letsencrypt/pebble:latest
+        command: -config test/config/pebble-config.json -strict -dnsserver 127.0.0.1:8053
+        ports:
+          - 14000:14000 # HTTPS ACME API
+          - 15000:15000 # HTTPS Management API
+      challtestsrv:
+        image: ghcr.io/letsencrypt/pebble-challtestsrv:latest
+        ports:
+          - 8055:8055 # HTTP Management API
+          - 8053:8053 # DNS Server
+          - 5001:5001 # TLS-ALPN-01
+          - 5002:5002 # HTTP-01
+          - 5003:5003 # HTTP-01 via HTTPS
+
   pebble:
     name: Pebble
     runs-on: ubuntu-latest

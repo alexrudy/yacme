@@ -174,6 +174,10 @@ impl LockedPidRc<'_> {
     }
 }
 
+fn is_github_actions() -> bool {
+    std::env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true")
+}
+
 /// RAII wrapper around a pebble service.
 ///
 /// The pebble service will be started and managed via docker compose.
@@ -217,17 +221,16 @@ impl Pebble {
             return Self::new(hostname, challenge_server);
         }
 
-        if std::env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true") {
-            let challenge_server = "challtestsrv:8055";
-            let hostname = "pebble:14000";
-            return Self::new(hostname, challenge_server);
-        }
         return Self::new("localhost:14000", "localhost:8055");
     }
 
     fn start(&mut self) {
         let mut guard = self.lock.lock();
-
+        if is_github_actions() {
+            guard.increment();
+            tracing::info!("Relying on external service containers on Github Actions");
+            return;
+        }
         if !guard.is_empty() {
             let output = std::process::Command::new("docker")
                 .arg("compose")
@@ -425,6 +428,11 @@ impl Pebble {
         let mut guard = self.lock.lock();
 
         if guard.decrement() {
+            return;
+        }
+
+        if is_github_actions() {
+            tracing::info!("Relying on external service containers on Github Actions");
             return;
         }
 
