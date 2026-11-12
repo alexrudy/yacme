@@ -211,6 +211,10 @@ impl Pebble {
 
     /// Create a new `Pebble` instance with the default challenge server and hostname.
     pub fn automatic() -> Self {
+        if let Ok(hostname) = std::env::var("PEBBLE_HOST") && let Ok(challenge_server) = std::env::var("PEBBLE_CHALLENGE_SERVER") {
+            return Self::new(hostname, challenge_server);
+        }
+
         if std::env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true") {
             let challenge_server = "challtestsrv:8055";
             let hostname = "pebble:14000";
