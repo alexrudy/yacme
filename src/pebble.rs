@@ -288,6 +288,7 @@ impl Pebble {
             .add_root_certificate(self.certificate())
             .retry(reqwest::retry::for_host(self.hostname.clone()).max_retries_per_request(100))
             .timeout(Duration::from_secs(20))
+            .user_agent(crate::YACME_USER_AGENT)
             .build()
             .unwrap();
 

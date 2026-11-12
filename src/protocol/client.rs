@@ -39,8 +39,7 @@ impl Default for ClientBuilder {
 
 impl ClientBuilder {
     pub(crate) fn new() -> Self {
-        let builder =
-            reqwest::Client::builder().user_agent(concat!("YACME / ", env!("CARGO_PKG_VERSION")));
+        let builder = reqwest::Client::builder().user_agent(crate::YACME_USER_AGENT);
 
         ClientBuilder {
             inner: builder,
