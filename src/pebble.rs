@@ -6,6 +6,7 @@ use std::{
     io::{Read, Seek, Write},
     net::Ipv4Addr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use fd_lock::{RwLock, RwLockWriteGuard};
@@ -285,33 +286,36 @@ impl Pebble {
     pub async fn ready(&self) -> Result<(), reqwest::Error> {
         let client = reqwest::Client::builder()
             .add_root_certificate(self.certificate())
+            .retry(reqwest::retry::for_host(self.hostname.clone()).max_retries_per_request(100))
+            .timeout(Duration::from_secs(20))
             .build()
             .unwrap();
 
-        loop {
-            match client
-                .get(format!("https://{}/dir", self.hostname))
-                .send()
-                .await
-            {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        break;
-                    }
-                    tracing::trace!(
-                        "Error response from pebble:\n{}",
-                        resp.text().await.unwrap_or("".to_owned())
-                    );
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        match client
+            .get(format!("https://{}/dir", self.hostname))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    tracing::trace!("Pebble is ready");
+                    return Ok(());
                 }
-                Err(error) => {
-                    tracing::trace!("Error connecting to pebble: {}", error);
-                    eprintln!("{:?}", error);
-                }
-            };
+
+                let err = resp.error_for_status_ref().unwrap_err();
+
+                tracing::trace!(
+                    "Error response from pebble:\n{}",
+                    resp.text().await.unwrap_or("".to_owned())
+                );
+                Err(err)
+            }
+            Err(error) => {
+                tracing::trace!("Error connecting to pebble: {}", error);
+                eprintln!("{:?}", error);
+                Err(error)
+            }
         }
-        tracing::trace!("Pebble is ready");
-        Ok(())
     }
 
     /// Get the pebble root CA certificate.
