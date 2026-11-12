@@ -377,9 +377,10 @@ where
         }
 
         if let Some(lim) = limit
-            && orders.len() >= lim {
-                return Ok(orders);
-            }
+            && orders.len() >= lim
+        {
+            return Ok(orders);
+        }
 
         match orders_page.next {
             Some(next_url) => {
