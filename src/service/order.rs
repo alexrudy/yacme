@@ -376,11 +376,10 @@ where
             orders.push(order);
         }
 
-        if let Some(lim) = limit {
-            if orders.len() >= lim {
+        if let Some(lim) = limit
+            && orders.len() >= lim {
                 return Ok(orders);
             }
-        }
 
         match orders_page.next {
             Some(next_url) => {
