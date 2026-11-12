@@ -46,6 +46,9 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Check service certificates
+        run: curl -kvI https://localhost:14000/dir
+
       - name: Run cargo test
         run: cargo test --all-features -- --no-capture
 
