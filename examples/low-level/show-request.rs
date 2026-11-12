@@ -7,9 +7,9 @@ use pkcs8::DecodePrivateKey;
 use reqwest::Certificate;
 use reqwest::Url;
 use yacme::protocol::{AcmeClient, Request};
+use yacme::schema::Account;
 use yacme::schema::account::{Contacts, CreateAccount};
 use yacme::schema::directory::Directory;
-use yacme::schema::Account;
 
 const DIRECTORY: &str = "https://localhost:14000/dir";
 

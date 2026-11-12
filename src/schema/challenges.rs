@@ -10,10 +10,10 @@ use chrono::{DateTime, Utc};
 use jaws::crypto::sha2::{Digest, Sha256};
 use jaws::key::JsonWebKey;
 use serde::ser::SerializeMap;
-use serde::{ser, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser};
 
-use crate::protocol::errors::AcmeErrorDocument;
 use crate::protocol::Url;
+use crate::protocol::errors::AcmeErrorDocument;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ChallengeInfo {

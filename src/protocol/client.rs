@@ -1,17 +1,17 @@
 //! Client for sending HTTP requests to an ACME server
 
-use reqwest::header::HeaderMap;
 use reqwest::Certificate;
+use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::errors::AcmeHTTPError;
 
+use super::Request;
+use super::Url;
 use super::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use super::jose::Nonce;
 use super::request::Key;
 use super::response::{Decode, Response};
-use super::Request;
-use super::Url;
 
 pub use AcmeClient as Client;
 

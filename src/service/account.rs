@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use jaws::key::SerializeJWK;
 
-use crate::protocol::{request::Key, AcmeError, Request, Response, Url};
+use crate::protocol::{AcmeError, Request, Response, Url, request::Key};
 use crate::schema::{
     self,
     account::{Contacts, CreateAccount, ExternalAccountBindingRequest},
@@ -13,8 +13,8 @@ use crate::schema::{
 use signature::Keypair;
 
 use super::{
-    order::{Order, OrderBuilder},
     Provider,
+    order::{Order, OrderBuilder},
 };
 
 /// An account with an ACME provider

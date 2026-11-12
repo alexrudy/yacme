@@ -15,11 +15,11 @@ use chrono::{DateTime, Utc};
 use reqwest::header::HeaderMap;
 use serde::de::DeserializeOwned;
 
+use super::AcmeError;
+use super::Url;
 use super::fmt::HttpCase;
 use super::jose::Nonce;
 use super::request::Encode;
-use super::AcmeError;
-use super::Url;
 
 use jaws::fmt;
 
