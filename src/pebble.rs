@@ -221,7 +221,7 @@ impl Pebble {
             return Self::new(hostname, challenge_server);
         }
 
-        return Self::new("localhost:14000", "localhost:8055");
+        Self::new("localhost:14000", "localhost:8055")
     }
 
     fn start(&mut self) {
