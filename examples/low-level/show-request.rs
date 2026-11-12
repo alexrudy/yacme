@@ -51,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cert = Certificate::from_pem(&read_bytes(PEBBLE_ROOT_CA)?)?;
     let client = reqwest::Client::builder()
         .add_root_certificate(cert.clone())
+        .user_agent(yacme::YACME_USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
 
