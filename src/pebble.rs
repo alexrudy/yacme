@@ -177,6 +177,7 @@ impl LockedPidRc<'_> {
 
 fn is_github_actions() -> bool {
     std::env::var("GITHUB_ACTIONS").ok().as_deref() == Some("true")
+        && std::env::var("GHA_PEBBLE_SERVICES").ok().as_deref() == Some("true")
 }
 
 /// RAII wrapper around a pebble service.
@@ -282,6 +283,18 @@ impl Pebble {
         }
     }
 
+    fn challserv_client(&self) -> reqwest::Client {
+        reqwest::Client::builder()
+            .retry(
+                reqwest::retry::for_host(self.challenge_server.clone())
+                    .max_retries_per_request(100),
+            )
+            .timeout(Duration::from_secs(20))
+            .user_agent(crate::YACME_USER_AGENT)
+            .build()
+            .unwrap()
+    }
+
     /// Wait for the pebble server to be ready.
     pub async fn ready(&self) -> Result<(), reqwest::Error> {
         let client = reqwest::Client::builder()
@@ -346,7 +359,8 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
+        let resp = self
+            .challserv_client()
             .post(format!("http://{}/add-a", self.challenge_server))
             .json(&chall_setup)
             .send()
@@ -380,7 +394,8 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
+        let resp = self
+            .challserv_client()
             .post(format!("http://{}/set-txt", self.challenge_server))
             .json(&chall_setup)
             .send()
@@ -414,7 +429,8 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
+        let resp = self
+            .challserv_client()
             .post(format!("http://{}/add-http01", self.challenge_server))
             .json(&chall_setup)
             .send()

@@ -7,6 +7,7 @@
 //! you would have to implement this yourself.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use p256::elliptic_curve::Generate;
 use pkcs8::DecodePrivateKey;
@@ -121,7 +122,12 @@ async fn http01_challenge_response(
         serde_json::to_string(&chall_setup).unwrap()
     );
 
-    let resp = reqwest::Client::new()
+    let resp = reqwest::Client::builder()
+        .user_agent(yacme::YACME_USER_AGENT)
+        .timeout(Duration::from_secs(20))
+        .retry(reqwest::retry::for_host("localhost").max_retries_per_request(20))
+        .build()
+        .unwrap()
         .post("http://localhost:8055/add-http01")
         .json(&chall_setup)
         .send()
