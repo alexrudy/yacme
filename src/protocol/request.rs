@@ -41,11 +41,11 @@ use jaws::token::{Signed, TokenFormat, Unsigned};
 use reqwest::header::HeaderMap;
 use serde::Serialize;
 
-use super::fmt::HttpCase;
-use super::jose::{AccountKeyIdentifier, Nonce, RequestHeader};
 use super::AcmeError;
 use super::Url;
-use jaws::{fmt, Flat};
+use super::fmt::HttpCase;
+use super::jose::{AccountKeyIdentifier, Nonce, RequestHeader};
+use jaws::{Flat, fmt};
 
 const CONTENT_JOSE: &str = "application/jose+json";
 

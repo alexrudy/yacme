@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::sync::Arc;
 
-use serde::{ser, Serialize};
+use serde::{Serialize, ser};
 
 use super::Url;
 

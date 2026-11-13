@@ -3,11 +3,11 @@
 use std::fmt;
 
 use x509_cert::der::{
-    asn1::{Ia5StringRef, SetOfVec},
     Encode, FixedTag,
+    asn1::{Ia5StringRef, SetOfVec},
 };
-use x509_cert::ext::pkix;
 use x509_cert::ext::ToExtension;
+use x509_cert::ext::pkix;
 use x509_cert::spki::SignatureBitStringEncoding;
 const PEM_TAG_CSR: &str = "CERTIFICATE REQUEST";
 

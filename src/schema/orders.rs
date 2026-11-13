@@ -15,9 +15,9 @@ use signature::Keypair;
 use x509_cert::spki::DynSignatureAlgorithmIdentifier;
 
 use super::identifier::Identifier;
+use crate::protocol::Url;
 use crate::protocol::errors::AcmeError;
 use crate::protocol::errors::AcmeErrorDocument;
-use crate::protocol::Url;
 
 const PEM_DOCUMENT_BEGIN: &str = "-----BEGIN";
 
