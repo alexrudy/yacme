@@ -1,17 +1,17 @@
 //! Client for sending HTTP requests to an ACME server
 
-use reqwest::header::HeaderMap;
 use reqwest::Certificate;
+use reqwest::header::HeaderMap;
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::errors::AcmeHTTPError;
 
+use super::Request;
+use super::Url;
 use super::errors::{AcmeError, AcmeErrorCode, AcmeErrorDocument};
 use super::jose::Nonce;
 use super::request::Key;
 use super::response::{Decode, Response};
-use super::Request;
-use super::Url;
 
 pub use AcmeClient as Client;
 
@@ -39,8 +39,7 @@ impl Default for ClientBuilder {
 
 impl ClientBuilder {
     pub(crate) fn new() -> Self {
-        let builder =
-            reqwest::Client::builder().user_agent(concat!("YACME / ", env!("CARGO_PKG_VERSION")));
+        let builder = reqwest::Client::builder().user_agent(crate::YACME_USER_AGENT);
 
         ClientBuilder {
             inner: builder,
@@ -131,11 +130,11 @@ impl Default for AcmeClientConfiguration {
 /// # use yacme::protocol::AcmeClient;
 /// # use yacme::protocol::Request;
 /// # use yacme::protocol::Response;
-/// # use signature::rand_core::OsRng;
+/// # use p256::elliptic_curve::Generate;
 /// #
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::random(&mut OsRng));
+/// let key: Arc<::ecdsa::SigningKey<p256::NistP256>> = Arc::new(::ecdsa::SigningKey::generate());
 ///
 /// let mut client = AcmeClient::default();
 /// client.set_new_nonce_url("https://acme.example.com/new-nonce".parse().unwrap());

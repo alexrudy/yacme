@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tokio::sync::Mutex;
 
-use crate::protocol::{response::Decode, AcmeError, Request, Response, Url};
+use crate::protocol::{AcmeError, Request, Response, Url, response::Decode};
 
 #[cfg(feature = "trace-requests")]
 use crate::protocol::request::Encode;

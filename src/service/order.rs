@@ -6,10 +6,10 @@
 use crate::protocol::{AcmeError, Request, Response, Url};
 use crate::schema;
 use crate::schema::{
+    Identifier,
     authorizations::Authorization as AuthorizationSchema,
     orders::{CertificateChain, FinalizeOrder, NewOrderRequest},
     orders::{Order as OrderSchema, OrderStatus},
-    Identifier,
 };
 use chrono::{DateTime, Utc};
 use signature::Keypair;
@@ -376,10 +376,10 @@ where
             orders.push(order);
         }
 
-        if let Some(lim) = limit {
-            if orders.len() >= lim {
-                return Ok(orders);
-            }
+        if let Some(lim) = limit
+            && orders.len() >= lim
+        {
+            return Ok(orders);
         }
 
         match orders_page.next {

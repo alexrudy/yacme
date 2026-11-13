@@ -6,6 +6,7 @@ use std::{
     io::{Read, Seek, Write},
     net::Ipv4Addr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use fd_lock::{RwLock, RwLockWriteGuard};
@@ -180,6 +181,10 @@ impl LockedPidRc<'_> {
 #[derive(Debug)]
 pub struct Pebble {
     directory: PathBuf,
+
+    /// Hostname for the ACME server
+    pub hostname: String,
+    challenge_server: String,
     lock: PidRc,
 }
 
@@ -190,14 +195,30 @@ impl Pebble {
     /// This effectively acts as a signleton, in that only one pebble
     /// docker container will be started at any given time, but creating
     /// multiple `Pebble` instances will all refer to the same container.
-    pub fn new() -> Self {
+    pub fn new(hostname: impl Into<String>, challenge_server: impl Into<String>) -> Self {
         let directory: PathBuf = PEBBLE_DIRECTORY.into();
         let lock = PidRc::new(&directory.join("lock"));
-        let mut pebble = Self { directory, lock };
+        let mut pebble = Self {
+            directory,
+            hostname: hostname.into(),
+            challenge_server: challenge_server.into(),
+            lock,
+        };
 
         pebble.start();
 
         pebble
+    }
+
+    /// Create a new `Pebble` instance with the default challenge server and hostname.
+    pub fn automatic() -> Self {
+        if let Ok(hostname) = std::env::var("PEBBLE_HOST")
+            && let Ok(challenge_server) = std::env::var("PEBBLE_CHALLENGE_SERVER")
+        {
+            return Self::new(hostname, challenge_server);
+        }
+
+        Self::new("localhost:14000", "localhost:8055")
     }
 
     fn start(&mut self) {
@@ -243,6 +264,8 @@ impl Pebble {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            eprint!("{stdout}");
             guard.clear(); // nothing is running, so clear the lock file
             panic!("Failed to start a pebble server: {stderr}");
         } else {
@@ -251,32 +274,53 @@ impl Pebble {
         }
     }
 
+    fn challserv_client(&self) -> reqwest::Client {
+        reqwest::Client::builder()
+            .retry(
+                reqwest::retry::for_host(self.challenge_server.clone())
+                    .max_retries_per_request(100),
+            )
+            .timeout(Duration::from_secs(20))
+            .user_agent(crate::YACME_USER_AGENT)
+            .build()
+            .unwrap()
+    }
+
     /// Wait for the pebble server to be ready.
     pub async fn ready(&self) -> Result<(), reqwest::Error> {
         let client = reqwest::Client::builder()
             .add_root_certificate(self.certificate())
+            .retry(reqwest::retry::for_host(self.hostname.clone()).max_retries_per_request(100))
+            .timeout(Duration::from_secs(20))
+            .user_agent(crate::YACME_USER_AGENT)
             .build()
             .unwrap();
 
-        loop {
-            match client.get("https://localhost:14000/dir").send().await {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        break;
-                    }
-                    tracing::trace!(
-                        "Error response from pebble:\n{}",
-                        resp.text().await.unwrap_or("".to_owned())
-                    );
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        match client
+            .get(format!("https://{}/dir", self.hostname))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    tracing::trace!("Pebble is ready");
+                    return Ok(());
                 }
-                Err(error) => {
-                    tracing::trace!("Error connecting to pebble: {}", error);
-                }
-            };
-        }
 
-        Ok(())
+                let err = resp.error_for_status_ref().unwrap_err();
+
+                tracing::trace!(
+                    "Error response from pebble:\n{}",
+                    resp.text().await.unwrap_or("".to_owned())
+                );
+                Err(err)
+            }
+            Err(error) => {
+                tracing::trace!("Error connecting to pebble: {}", error);
+                eprintln!("{:?}", error);
+                Err(error)
+            }
+        }
     }
 
     /// Get the pebble root CA certificate.
@@ -306,8 +350,9 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-a")
+        let resp = self
+            .challserv_client()
+            .post(format!("http://{}/add-a", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await
@@ -340,8 +385,9 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
-            .post("http://localhost:8055/set-txt")
+        let resp = self
+            .challserv_client()
+            .post(format!("http://{}/set-txt", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await
@@ -374,8 +420,9 @@ impl Pebble {
             serde_json::to_string(&chall_setup).unwrap()
         );
 
-        let resp = reqwest::Client::new()
-            .post("http://localhost:8055/add-http01")
+        let resp = self
+            .challserv_client()
+            .post(format!("http://{}/add-http01", self.challenge_server))
             .json(&chall_setup)
             .send()
             .await

@@ -6,27 +6,28 @@
 
 use std::collections::HashSet;
 
-use serde::{ser, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser};
 
 use crate::protocol::Url;
 
 pub mod external {
     //! External account binding to connect provider accounts to ACME accounts.
 
+    use jaws::SignatureBytes;
     use jaws::algorithms::hmac::HmacKey;
     use jaws::base64data::Base64Data;
     use jaws::key::JsonWebKey;
     use jaws::token::Signed;
-    use jaws::SignatureBytes;
 
     use jaws::Flat;
     use jaws::Token;
+    use jaws::crypto::sha2;
+    use jaws::crypto::signature::SignatureEncoding;
     use serde::{Deserialize, Serialize};
-    use signature::SignatureEncoding;
 
-    use crate::protocol::jose::RequestHeader;
     use crate::protocol::Base64Signature;
     use crate::protocol::Url;
+    use crate::protocol::jose::RequestHeader;
 
     /// Account key for externally binding accounts, provided by the ACME
     /// provider.

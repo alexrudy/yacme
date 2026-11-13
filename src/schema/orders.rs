@@ -15,9 +15,9 @@ use signature::Keypair;
 use x509_cert::spki::DynSignatureAlgorithmIdentifier;
 
 use super::identifier::Identifier;
+use crate::protocol::Url;
 use crate::protocol::errors::AcmeError;
 use crate::protocol::errors::AcmeErrorDocument;
-use crate::protocol::Url;
 
 const PEM_DOCUMENT_BEGIN: &str = "-----BEGIN";
 
@@ -261,7 +261,7 @@ impl crate::protocol::response::Decode for CertificateChain {
 }
 
 impl pem_rfc7468::PemLabel for CertificateChain {
-    const PEM_LABEL: &'static str = x509_cert::Certificate::PEM_LABEL;
+    const PEM_LABEL: &'static str = <x509_cert::Certificate as PemLabel>::PEM_LABEL;
 }
 
 impl crate::protocol::request::Encode for CertificateChain {

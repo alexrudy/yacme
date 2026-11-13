@@ -8,12 +8,12 @@ use crate::schema;
 use crate::schema::authorizations::AuthorizationStatus;
 use crate::schema::challenges::ChallengeStatus;
 use crate::schema::{
+    Identifier,
     authorizations::Authorization as AuthorizationSchema,
     challenges::{
         Challenge as ChallengeSchema, ChallengeKind, ChallengeReadyRequest, Dns01Challenge,
         Http01Challenge,
     },
-    Identifier,
 };
 
 use super::{account::Account, client::Client, order::Order};
