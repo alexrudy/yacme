@@ -7,14 +7,26 @@
 //! you would have to implement this yourself.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use p256::elliptic_curve::Generate;
 use pkcs8::DecodePrivateKey;
+use yacme::protocol::Url;
 use yacme::schema::authorizations::AuthorizationStatus;
 use yacme::schema::challenges::{ChallengeKind, Http01Challenge};
 
 const PRIVATE_KEY_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/reference-keys/ec-p255.pem");
 const PEBBLE_ROOT_CA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/pebble/pebble.minica.pem");
+
+fn pebble_directory() -> Url {
+    if let Ok(hostname) = std::env::var("PEBBLE_HOSTNAME") {
+        format!("https://{hostname}/dir")
+            .parse()
+            .expect("invalid URL from PEBBLE_HOSTNAME")
+    } else {
+        yacme::service::provider::PEBBLE.parse().unwrap()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cert = reqwest::Certificate::from_pem(&std::fs::read(PEBBLE_ROOT_CA)?)?;
 
     let provider = yacme::service::Provider::build()
-        .directory_url(yacme::service::provider::PEBBLE.parse().unwrap())
+        .directory_url(pebble_directory())
         .add_root_certificate(cert)
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -110,7 +122,12 @@ async fn http01_challenge_response(
         serde_json::to_string(&chall_setup).unwrap()
     );
 
-    let resp = reqwest::Client::new()
+    let resp = reqwest::Client::builder()
+        .user_agent(yacme::YACME_USER_AGENT)
+        .timeout(Duration::from_secs(20))
+        .retry(reqwest::retry::for_host("localhost").max_retries_per_request(20))
+        .build()
+        .unwrap()
         .post("http://localhost:8055/add-http01")
         .json(&chall_setup)
         .send()

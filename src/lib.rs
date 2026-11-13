@@ -5,6 +5,9 @@
 #![cfg_attr(feature = "pebble", doc = include_str!("../README.md"))]
 #![deny(missing_docs)]
 
+/// The user agent string used for all HTTP requests.
+pub const YACME_USER_AGENT: &str = concat!("YACME / ", env!("CARGO_PKG_VERSION"));
+
 pub mod cert;
 pub mod protocol;
 pub mod schema;
