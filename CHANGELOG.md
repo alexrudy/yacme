@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0](https://github.com/alexrudy/yacme/compare/v5.0.1...v6.0.0) - 2026-11-14
+
+### Other
+
+- Fixup `cargo doc`
+- Upgrade jaws 1 -> 2
+- CI robustness and pebble
+- fmt & clippy
+- Upgrade jaws and crypto
+
 ## [5.0.1](https://github.com/alexrudy/yacme/compare/v5.0.0...v5.0.1) - 2025-12-10
 
 ### Other
