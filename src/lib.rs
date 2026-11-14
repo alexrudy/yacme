@@ -1,5 +1,5 @@
 #![cfg_attr(
-    any(not(doc), not(pebble)),
+    any(not(doc), not(feature = "pebble")),
     doc = "YACME is an implementation of the [ACME protocol](https://tools.ietf.org/html/rfc8555)."
 )]
 #![cfg_attr(feature = "pebble", doc = include_str!("../README.md"))]
